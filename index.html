@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+    <meta name="theme-color" content="#07081a" />
+    <title>Tetra Friends</title>
+    <link rel="icon" href="assets/favicon.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="css/style.css" />
+  </head>
+  <body>
+    <canvas id="sky"></canvas>
+    <div class="vignette"></div>
+    <div class="grain"></div>
+
+    <div id="app">
+      <section id="menu" class="screen">
+        <div class="logo">
+          <div class="logo-minos" aria-hidden="true">
+            <span class="m i"></span>
+            <span class="m o"></span>
+            <span class="m t"></span>
+            <span class="m s"></span>
+            <span class="m z"></span>
+            <span class="m j"></span>
+            <span class="m l"></span>
+          </div>
+          <h1><span>TETRA</span><span>FRIENDS</span></h1>
+          <p class="tagline">Guideline marathon. Neon soul. 2009-era rules.</p>
+        </div>
+
+        <div class="mode-grid">
+          <button class="mode-card" data-mode="marathon">
+            <em>01</em>
+            <strong>Marathon</strong>
+            <span>15 variable-goal levels. Stack, spin, survive.</span>
+          </button>
+          <button class="mode-card" data-mode="sprint">
+            <em>02</em>
+            <strong>Sprint</strong>
+            <span>40 lines. Race the clock like the old Solo courts.</span>
+          </button>
+          <button class="mode-card" data-mode="ultra">
+            <em>03</em>
+            <strong>Ultra</strong>
+            <span>Two minutes. Score like it is still Friday night on the site.</span>
+          </button>
+        </div>
+
+        <div class="menu-row">
+          <button class="ghost-btn" id="btn-how">How to play</button>
+          <button class="ghost-btn" id="btn-scores">Records</button>
+          <button class="ghost-btn" id="btn-settings">Settings</button>
+        </div>
+        <p class="hint">Press Enter for Marathon · Z / X rotate · C hold · Space slam</p>
+      </section>
+
+      <section id="play" class="screen hidden">
+        <aside class="hud-col left">
+          <div class="panel">
+            <span class="panel-label">HOLD</span>
+            <canvas id="hold" width="160" height="120"></canvas>
+          </div>
+          <div class="panel stats-panel">
+            <div class="stat"><span>Score</span><strong id="stat-score">0</strong></div>
+            <div class="stat"><span>Level</span><strong id="stat-level">1</strong></div>
+            <div class="stat" id="stat-goal-wrap"><span>Goal</span><strong id="stat-goal">5</strong></div>
+            <div class="stat"><span>Lines</span><strong id="stat-lines">0</strong></div>
+            <div class="stat"><span>Time</span><strong id="stat-time">0:00</strong></div>
+            <div class="goal-bar" id="goal-bar"><i id="goal-fill"></i></div>
+          </div>
+        </aside>
+
+        <div class="stage">
+          <div class="well-frame" id="well-frame">
+            <div class="well-ring" id="well-ring"></div>
+            <canvas id="board"></canvas>
+            <div id="banners"></div>
+            <div id="ready-go" class="hidden"><span>READY</span></div>
+            <div id="combo-chip" class="hidden"></div>
+          </div>
+        </div>
+
+        <aside class="hud-col right">
+          <div class="panel">
+            <span class="panel-label">NEXT</span>
+            <canvas id="next" width="160" height="420"></canvas>
+          </div>
+        </aside>
+      </section>
+    </div>
+
+    <div id="touch" class="hidden">
+      <button data-act="hold">HOLD</button>
+      <button data-act="rotCCW">CCW</button>
+      <button data-act="rotCW">CW</button>
+      <button data-act="hard" class="wide">DROP</button>
+      <button data-act="left">◀</button>
+      <button data-act="down">▼</button>
+      <button data-act="right">▶</button>
+    </div>
+
+    <div id="overlay" class="hidden">
+      <div class="modal" id="modal-how">
+        <h2>How to play</h2>
+        <p>
+          Built to the old Tetris Friends website rules: Super Rotation System, 7-bag randomizer, hold,
+          five next pieces, ghost piece, hard drop, move-reset lock delay, 3-corner T-spins with Mini
+          detection, combos, back-to-back, and variable-goal Marathon (5 × level, no leftover goal).
+        </p>
+        <ul class="keys">
+          <li><kbd>←</kbd><kbd>→</kbd> Move</li>
+          <li><kbd>↓</kbd> Soft drop</li>
+          <li><kbd>Space</kbd> Hard drop</li>
+          <li><kbd>↑</kbd> / <kbd>X</kbd> Rotate CW</li>
+          <li><kbd>Z</kbd> / <kbd>Ctrl</kbd> Rotate CCW</li>
+          <li><kbd>C</kbd> / <kbd>Shift</kbd> Hold</li>
+          <li><kbd>P</kbd> / <kbd>Esc</kbd> Pause</li>
+        </ul>
+        <button class="solid-btn" data-close>Got it</button>
+      </div>
+
+      <div class="modal hidden" id="modal-scores">
+        <h2>Records</h2>
+        <div id="scoreboard"></div>
+        <button class="solid-btn" data-close>Close</button>
+      </div>
+
+      <div class="modal hidden" id="modal-settings">
+        <h2>Settings</h2>
+        <label>DAS <input id="set-das" type="range" min="50" max="300" step="1" /> <em id="das-val"></em></label>
+        <label>ARR <input id="set-arr" type="range" min="0" max="80" step="1" /> <em id="arr-val"></em></label>
+        <label>Music <input id="set-music" type="range" min="0" max="100" step="1" /></label>
+        <label>Effects <input id="set-sfx" type="range" min="0" max="100" step="1" /></label>
+        <label class="check"><input id="set-shake" type="checkbox" checked /> Screen shake</label>
+        <label class="check"><input id="set-ghost" type="checkbox" checked /> Ghost piece</label>
+        <button class="solid-btn" data-close>Done</button>
+      </div>
+
+      <div class="modal hidden" id="modal-pause">
+        <h2>Paused</h2>
+        <button class="solid-btn" id="btn-resume">Resume</button>
+        <button class="ghost-btn" id="btn-quit">Quit to menu</button>
+      </div>
+
+      <div class="modal hidden" id="modal-end">
+        <p class="end-kicker" id="end-kicker">Game over</p>
+        <h2 id="end-title">Top out</h2>
+        <div class="end-stats" id="end-stats"></div>
+        <button class="solid-btn" id="btn-retry">Play again</button>
+        <button class="ghost-btn" id="btn-menu">Menu</button>
+      </div>
+    </div>
+
+    <script src="js/engine.js"></script>
+    <script src="js/app.js"></script>
+  </body>
+</html>
