@@ -989,8 +989,8 @@
         }
       }
       if (ev.type === "stackDrop" && isYou) {
-        app.dropMap = ev.dropFrom;
-        app.stackSlide = 1;
+        app.dropMap = null;
+        app.stackSlide = 0;
       }
       if (ev.type === "ko") {
         banner("KO", isYou ? "tspin" : "tetris", "", isYou);

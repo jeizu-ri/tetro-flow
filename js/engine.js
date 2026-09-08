@@ -1302,6 +1302,7 @@
       this.phase = "think";
       this.tries = 0;
       this.pieceId = -1;
+      this._justCleared = false;
       this.setSkill(skill);
     }
 
@@ -1316,6 +1317,7 @@
       this.phase = "think";
       this.tries = 0;
       this.pieceId = -1;
+      this._justCleared = false;
     }
 
     _pace() {
@@ -1348,12 +1350,26 @@
           let score = sim.score;
           if (threat > 0 && sim.lines > 0) score += sim.attack * 90 + sim.lines * 140;
           else if (threat > 4 && sim.lines === 0) score -= 80;
-          if (nextType) {
-            const follow = this._pickBest(this._candidates(nextType, sim.board, null));
-            if (follow) score += follow.score * 0.55;
-          }
           if (skill.noise) score += (Math.random() - 0.5) * 2 * skill.noise;
-          list.push({ rot: rot, x: x, y: p.y, score: score, hold: false, lines: sim.lines });
+          list.push({
+            rot: rot,
+            x: x,
+            y: p.y,
+            score: score,
+            hold: false,
+            lines: sim.lines,
+            board: sim.board,
+          });
+        }
+      }
+      if (nextType && list.length) {
+        list.sort(function (a, b) {
+          return b.score - a.score;
+        });
+        const top = Math.min(6, list.length);
+        for (let i = 0; i < top; i++) {
+          const follow = this._pickBest(this._candidates(nextType, list[i].board, null));
+          if (follow) list[i].score += follow.score * 0.55;
         }
       }
       return list;
@@ -1367,7 +1383,7 @@
       const g = this.game;
       const piece = g.current;
       if (!piece) return null;
-      const next = this.skill.lookAhead ? g.queue[0] : null;
+      const next = this.skill.lookAhead && !this._justCleared ? g.queue[0] : null;
       let now = this._bestOn(piece.type, g.board, next);
       if (this.skill.mistake && now && Math.random() < this.skill.mistake) {
         const all = this._candidates(piece.type, g.board, null);
@@ -1406,71 +1422,106 @@
       if (g.current) g.hardDrop();
     }
 
+    _noteClear(g, from) {
+      this._justCleared = false;
+      const ev = g.events;
+      for (let i = from || 0; i < ev.length; i++) {
+        if (ev[i].type === "lineClear" && ev[i].lines > 0) this._justCleared = true;
+      }
+    }
+
+    _playOne() {
+      const g = this.game;
+      if (this.pieceId !== g.pieceCount) {
+        this.pieceId = g.pieceCount;
+        this.plan = null;
+        this.phase = "think";
+        this.tries = 0;
+        const pace = this._pace();
+        this.thinkMs = this._justCleared ? (this.skill.snap ? 0 : Math.min(40, pace.think)) : pace.think;
+        this.actionMs = pace.action;
+        this.dropWait = pace.drop;
+        if (!this._justCleared) this.timer = 0;
+        else this.timer = this.thinkMs;
+      }
+      if (this.phase === "think") {
+        if (this.timer < this.thinkMs) return "wait";
+        this.plan = this._best();
+        this.timer = 0;
+        this.phase = "move";
+        if (!this.plan) {
+          const from = g.events.length;
+          g.hardDrop();
+          this._noteClear(g, from);
+          return this._justCleared ? "combo" : "done";
+        }
+        if (this.skill.snap) {
+          const from = g.events.length;
+          const wasHold = this.plan.hold;
+          this._snap(this.plan);
+          this.plan = null;
+          if (wasHold) {
+            this.pieceId = -1;
+            this.phase = "think";
+            this.timer = this.thinkMs;
+            return "combo";
+          }
+          this._noteClear(g, from);
+          return this._justCleared ? "combo" : "done";
+        }
+      }
+      if (!this.plan) return "done";
+      if (this.plan.hold) {
+        if (this.timer < this.actionMs) return "wait";
+        g.holdPiece();
+        this.plan = null;
+        this.pieceId = -1;
+        return "combo";
+      }
+      if (this.phase === "drop") {
+        if (this.timer < this.dropWait) return "wait";
+        const from = g.events.length;
+        g.hardDrop();
+        this.plan = null;
+        this._noteClear(g, from);
+        return this._justCleared ? "combo" : "done";
+      }
+      if (this.timer < this.actionMs) return "wait";
+      this.timer = 0;
+      this.tries += 1;
+      const p = g.current;
+      if (!p) return "done";
+      if (p.rot !== this.plan.rot) {
+        if (!g.rotate(1)) g.rotate(-1);
+        if (this.tries > 12) g.hardDrop();
+        return "wait";
+      }
+      if (p.x < this.plan.x) {
+        if (!g._shift(1)) g.hardDrop();
+        return "wait";
+      }
+      if (p.x > this.plan.x) {
+        if (!g._shift(-1)) g.hardDrop();
+        return "wait";
+      }
+      this.phase = "drop";
+      this.timer = 0;
+      return "wait";
+    }
+
     update(dt) {
       const g = this.game;
       if (g.state !== "playing" || !g.current) {
         this.plan = null;
         return;
       }
-      if (this.pieceId !== g.pieceCount) {
-        this.plan = null;
-        this.pieceId = g.pieceCount;
-        this.phase = "think";
-        this.timer = 0;
-        this.tries = 0;
-        const pace = this._pace();
-        this.thinkMs = pace.think;
-        this.actionMs = pace.action;
-        this.dropWait = pace.drop;
-      }
       this.timer += dt;
-      if (this.phase === "think") {
-        if (this.timer < this.thinkMs) return;
-        this.plan = this._best();
-        this.timer = 0;
-        this.phase = "move";
-        if (!this.plan) {
-          g.hardDrop();
-          return;
-        }
-        if (this.skill.snap) {
-          this._snap(this.plan);
-          this.plan = null;
-          return;
-        }
+      let steps = 0;
+      while (g.state === "playing" && g.current && steps++ < 8) {
+        const result = this._playOne();
+        if (result === "combo") continue;
+        break;
       }
-      if (!this.plan) return;
-      if (this.plan.hold) {
-        if (this.timer < this.actionMs) return;
-        g.holdPiece();
-        this.plan = null;
-        return;
-      }
-      if (this.phase === "drop") {
-        if (this.timer < this.dropWait) return;
-        g.hardDrop();
-        this.plan = null;
-        return;
-      }
-      if (this.timer < this.actionMs) return;
-      this.timer = 0;
-      this.tries += 1;
-      const p = g.current;
-      if (p.rot !== this.plan.rot) {
-        if (!g.rotate(1)) g.rotate(-1);
-        if (this.tries > 12) g.hardDrop();
-        return;
-      }
-      if (p.x < this.plan.x) {
-        if (!g._shift(1)) g.hardDrop();
-        return;
-      }
-      if (p.x > this.plan.x) {
-        if (!g._shift(-1)) g.hardDrop();
-        return;
-      }
-      this.phase = "drop";
-      this.timer = 0;
     }
   }
 
