@@ -2,7 +2,7 @@
 
 A Tetris Friends–style **Battle 2P** game: you vs a bot on two boards. Bright toy-plastic look, not a neon overlay.
 
-Hold sits on the **left**, Next on the **right**, 10×20 wells at standard size. Pieces use **SRS** rotations. Scoring is guideline / Tetris Friends (T-Spin Double is `1200 × level`).
+Hold sits on the **left of your well**, Next on the **right of your well**, 10×20 matrices at standard size. Pieces use **SRS** rotations. Scoring is guideline / Tetris Friends (T-Spin Double is `1200 × level`).
 
 ## Play
 

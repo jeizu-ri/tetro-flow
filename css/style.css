@@ -324,8 +324,27 @@ body {
   gap: 12px;
 }
 
-.hud-col.right {
-  width: 148px;
+.you-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.well-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.next-panel {
+  width: 128px;
+  margin-top: 28px;
+  padding: 10px 8px;
+}
+
+.next-panel canvas {
+  display: block;
+  width: 112px !important;
 }
 
 .panel {
@@ -672,10 +691,16 @@ kbd {
     order: 2;
     flex: 1;
   }
-  .hud-col.right {
-    order: 3;
-    flex: 1;
-    width: auto;
+  .you-row {
+    gap: 6px;
+  }
+  .next-panel {
+    width: 96px;
+    margin-top: 24px;
+    padding: 8px 6px;
+  }
+  .next-panel canvas {
+    width: 84px !important;
   }
   .vs-wrap {
     width: 100%;

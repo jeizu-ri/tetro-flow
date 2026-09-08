@@ -698,7 +698,7 @@
   function layout() {
     const mobile = window.innerWidth < 980;
     const chromeY = mobile ? 158 : 52;
-    const chromeX = mobile ? 20 : 430;
+    const chromeX = mobile ? 24 : 390;
     const maxH = Math.max(320, window.innerHeight - chromeY);
     const maxW = Math.max(200, (window.innerWidth - chromeX) / 2);
     app.cell = Math.max(18, Math.min(42, Math.floor(maxH / VISIBLE), Math.floor(maxW / COLS)));

@@ -66,13 +66,21 @@
 
         <div class="vs-wrap">
           <div class="stage you">
-            <div class="well-caption">You</div>
-            <div class="well-frame" id="well-frame">
-              <div class="well-ring" id="well-ring"></div>
-              <canvas id="board"></canvas>
-              <div id="banners"></div>
-              <div id="ready-go" class="hidden"><span>READY</span></div>
-              <div id="combo-chip" class="hidden"></div>
+            <div class="you-row">
+              <div class="well-col">
+                <div class="well-caption">You</div>
+                <div class="well-frame" id="well-frame">
+                  <div class="well-ring" id="well-ring"></div>
+                  <canvas id="board"></canvas>
+                  <div id="banners"></div>
+                  <div id="ready-go" class="hidden"><span>READY</span></div>
+                  <div id="combo-chip" class="hidden"></div>
+                </div>
+              </div>
+              <div class="panel next-panel">
+                <span class="panel-label">Next</span>
+                <canvas id="next" width="160" height="320"></canvas>
+              </div>
             </div>
           </div>
 
@@ -97,13 +105,6 @@
           </div>
           <div id="result-banner" class="hidden"></div>
         </div>
-
-        <aside class="hud-col right">
-          <div class="panel">
-            <span class="panel-label">Next</span>
-            <canvas id="next" width="160" height="320"></canvas>
-          </div>
-        </aside>
       </section>
     </div>
 
@@ -121,12 +122,12 @@
       <div class="modal" id="modal-how">
         <h2>How to play</h2>
         <p>
-          Battle 2P, Tetris Friends style: Hold on the left, Next on the right, 10×20 wells.
-          SRS rotations, guideline scoring (T-Spin Double is 1200 × level, back-to-back ×1.5).
-          Level up every 10 lines — gravity and points both climb. Line clears send garbage
-          (doubles, triples, Tetrises, T-spins, back-to-back, combos). Incoming garbage can be
-          cancelled by attacking. First to <strong>3 KOs</strong> wins. If 2:00 runs out, KOs, then
-          garbage sent, then stack height decide it.
+          Battle 2P, Tetris Friends style: Hold on the left of your well, Next on the right of
+          your well, 10×20 boards. SRS rotations, guideline scoring (T-Spin Double is 1200 × level,
+          back-to-back ×1.5). Level up every 10 lines — gravity and points both climb. Line clears
+          send garbage (doubles, triples, Tetrises, T-spins, back-to-back, combos). Incoming garbage
+          can be cancelled by attacking. First to <strong>3 KOs</strong> wins. If 2:00 runs out,
+          KOs, then garbage sent, then stack height decide it.
         </p>
         <ul class="keys">
           <li><kbd>←</kbd><kbd>→</kbd> Move</li>
