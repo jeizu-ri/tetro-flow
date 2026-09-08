@@ -210,6 +210,13 @@ test("holding left auto-shifts after DAS then ARR", () => {
   assert.ok(g.current.x <= 1);
 });
 
+test("hard bot snaps many pieces quickly", () => {
+  const m = new E.BattleMatch("hard");
+  m.start();
+  for (let i = 0; i < 50; i++) m.update(40);
+  assert.ok(m.bot.stats.pieces >= 8, "hard bot pieces " + m.bot.stats.pieces);
+});
+
 test("hard bot plays faster than easy", () => {
   const easy = new E.BattleMatch("easy");
   const hard = new E.BattleMatch("hard");

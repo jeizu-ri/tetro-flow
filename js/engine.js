@@ -1137,12 +1137,15 @@
   function evaluateBoard(board, skill) {
     const holeW = skill && skill.holeW != null ? skill.holeW : 85;
     const bumpW = skill && skill.bumpW != null ? skill.bumpW : 3.4;
+    const wellW = skill && skill.wellW != null ? skill.wellW : 0;
     const heights = boardHeights(board);
     let holes = 0;
     let agg = 0;
     let bump = 0;
+    let high = 0;
     for (let x = 0; x < COLS; x++) {
       agg += heights[x];
+      if (heights[x] > 12) high += (heights[x] - 12) * (heights[x] - 12);
       let seen = false;
       for (let y = 0; y < ROWS; y++) {
         if (board[y][x]) seen = true;
@@ -1151,7 +1154,7 @@
     }
     for (let x = 0; x < COLS - 1; x++) bump += Math.abs(heights[x] - heights[x + 1]);
     let well = 0;
-    if (skill && skill.tetris >= 200) {
+    if (wellW) {
       let minH = 99;
       let wellCol = 9;
       for (let x = 0; x < COLS; x++) {
@@ -1164,13 +1167,38 @@
         let others = 0;
         for (let x = 0; x < COLS; x++) if (x !== wellCol) others += heights[x];
         others /= COLS - 1;
-        if (others - minH >= 3) well = 22;
+        if (others - minH >= 3) well = wellW;
+        if (others - minH >= 6) well += wellW * 0.5;
       }
     }
-    return -holes * holeW - agg * 2.2 - bump * bumpW + well;
+    return -holes * holeW - agg * 2.4 - bump * bumpW - high * 3.2 + well;
   }
 
-  function simulatePlace(board, piece, skill) {
+  function boardIsEmpty(board) {
+    for (let y = 0; y < ROWS; y++) {
+      for (let x = 0; x < COLS; x++) if (board[y][x]) return false;
+    }
+    return true;
+  }
+
+  function garbageForClear(lines, combo) {
+    let n = 0;
+    if (lines === 2) n = 1;
+    else if (lines === 3) n = 2;
+    else if (lines === 4) n = 4;
+    const extra = [0, 0, 1, 1, 1, 3, 3, 4, 4, 4, 4, 5];
+    if (combo >= 0) n += extra[Math.min(combo, extra.length - 1)];
+    return n;
+  }
+
+  function dropFromTop(board, type, x, rot) {
+    const p = { type: type, x: x, y: 0, rot: rot };
+    if (collides(board, p)) return null;
+    while (!collides(board, { type: p.type, x: p.x, y: p.y + 1, rot: p.rot })) p.y += 1;
+    return p;
+  }
+
+  function simulatePlace(board, piece, skill, combo) {
     const next = copyBoard(board);
     const cs = cellsOf(piece);
     for (let i = 0; i < cs.length; i++) {
@@ -1199,52 +1227,67 @@
     }
     const clearW = skill && skill.clearW != null ? skill.clearW : 48;
     const tetris = skill && skill.tetris != null ? skill.tetris : 220;
+    const attackW = skill && skill.attackW != null ? skill.attackW : 80;
+    const comboNow = combo == null ? -1 : combo;
     let score = evaluateBoard(out, skill) + cleared * clearW;
     if (cleared === 4) score += tetris;
-    if (cleared === 3) score += 40;
-    if (cleared === 2) score += 12;
-    return { score: score, lines: cleared, board: out };
+    if (cleared === 3) score += 70;
+    if (cleared === 2) score += 28;
+    const attack = cleared ? garbageForClear(cleared, comboNow + 1) : 0;
+    score += attack * attackW;
+    if (cleared && comboNow >= 0) score += (comboNow + 1) * 55;
+    if (cleared && boardIsEmpty(out)) score += 800;
+    return { score: score, lines: cleared, board: out, attack: attack };
   }
 
   const BOT_SKILLS = {
     easy: {
-      think: [640, 200],
-      action: 210,
-      drop: 300,
-      noise: 70,
-      holdMargin: 9999,
+      think: [260, 80],
+      action: 85,
+      drop: 110,
+      noise: 28,
+      holdMargin: 80,
       lookAhead: false,
-      mistake: 0.28,
-      holeW: 32,
-      bumpW: 1.8,
-      tetris: 40,
-      clearW: 18,
+      mistake: 0.12,
+      holeW: 70,
+      bumpW: 2.8,
+      tetris: 180,
+      clearW: 40,
+      attackW: 70,
+      wellW: 12,
+      snap: false,
     },
     medium: {
-      think: [220, 90],
-      action: 92,
-      drop: 120,
-      noise: 8,
-      holdMargin: 24,
-      lookAhead: false,
-      mistake: 0.04,
-      holeW: 92,
-      bumpW: 3.6,
-      tetris: 280,
-      clearW: 58,
-    },
-    hard: {
-      think: [55, 35],
-      action: 36,
-      drop: 36,
+      think: [70, 30],
+      action: 28,
+      drop: 28,
       noise: 0,
-      holdMargin: 8,
+      holdMargin: 12,
       lookAhead: true,
       mistake: 0,
-      holeW: 125,
-      bumpW: 4.4,
-      tetris: 560,
+      holeW: 110,
+      bumpW: 4,
+      tetris: 520,
       clearW: 90,
+      attackW: 160,
+      wellW: 70,
+      snap: true,
+    },
+    hard: {
+      think: [18, 12],
+      action: 12,
+      drop: 8,
+      noise: 0,
+      holdMargin: 4,
+      lookAhead: true,
+      mistake: 0,
+      holeW: 140,
+      bumpW: 4.8,
+      tetris: 980,
+      clearW: 130,
+      attackW: 260,
+      wellW: 140,
+      snap: true,
     },
   };
 
@@ -1253,9 +1296,9 @@
       this.game = game;
       this.plan = null;
       this.timer = 0;
-      this.actionMs = 92;
-      this.thinkMs = 220;
-      this.dropWait = 120;
+      this.actionMs = 28;
+      this.thinkMs = 70;
+      this.dropWait = 28;
       this.phase = "think";
       this.tries = 0;
       this.pieceId = -1;
@@ -1278,31 +1321,36 @@
     _pace() {
       const lv = this.game.level || 1;
       const s = this.skill;
-      const thinkCut = this.skillName === "hard" ? 4 : 12;
       return {
-        think: Math.max(40, s.think[0] - lv * thinkCut) + Math.random() * s.think[1],
-        action: Math.max(28, s.action - lv * (this.skillName === "hard" ? 1 : 3)),
-        drop: Math.max(24, s.drop - lv * (this.skillName === "hard" ? 1 : 4)),
+        think: Math.max(8, s.think[0] - lv * 2) + Math.random() * s.think[1],
+        action: Math.max(8, s.action - lv),
+        drop: Math.max(6, s.drop - lv),
       };
     }
 
-    _candidates(type, board, lookAhead) {
+    _pickBest(list) {
+      if (!list.length) return null;
+      let best = list[0];
+      for (let i = 1; i < list.length; i++) if (list[i].score > best.score) best = list[i];
+      return best;
+    }
+
+    _candidates(type, board, nextType) {
       const skill = this.skill;
-      const spawnY = SPAWN[type].y;
       const threat = this.game.pendingGarbage || 0;
-      const nextType = lookAhead && this.game.queue && this.game.queue[0];
+      const combo = this.game.combo;
       const list = [];
       for (let rot = 0; rot < 4; rot++) {
         for (let x = -2; x <= 8; x++) {
-          const p = { type: type, x: x, y: spawnY, rot: rot };
-          if (collides(board, p)) continue;
-          while (!collides(board, { type: p.type, x: p.x, y: p.y + 1, rot: p.rot })) p.y += 1;
-          const sim = simulatePlace(board, p, skill);
+          const p = dropFromTop(board, type, x, rot);
+          if (!p) continue;
+          const sim = simulatePlace(board, p, skill, combo);
           let score = sim.score;
-          if (threat > 0 && sim.lines > 0) score += sim.lines * 110 + (sim.lines >= 2 ? 60 : 0);
-          if (lookAhead && nextType) {
-            const follow = this._bestOn(nextType, sim.board, false);
-            if (follow) score += follow.score * 0.42;
+          if (threat > 0 && sim.lines > 0) score += sim.attack * 90 + sim.lines * 140;
+          else if (threat > 4 && sim.lines === 0) score -= 80;
+          if (nextType) {
+            const follow = this._pickBest(this._candidates(nextType, sim.board, null));
+            if (follow) score += follow.score * 0.55;
           }
           if (skill.noise) score += (Math.random() - 0.5) * 2 * skill.noise;
           list.push({ rot: rot, x: x, y: p.y, score: score, hold: false, lines: sim.lines });
@@ -1311,32 +1359,51 @@
       return list;
     }
 
-    _bestOn(type, board, lookAhead) {
-      const list = this._candidates(type, board, lookAhead);
-      if (!list.length) return null;
-      if (this.skill.mistake && Math.random() < this.skill.mistake) {
-        return list[Math.floor(Math.random() * list.length)];
-      }
-      let best = list[0];
-      for (let i = 1; i < list.length; i++) if (list[i].score > best.score) best = list[i];
-      return best;
+    _bestOn(type, board, nextType) {
+      return this._pickBest(this._candidates(type, board, nextType));
     }
 
     _best() {
       const g = this.game;
       const piece = g.current;
       if (!piece) return null;
-      const now = this._bestOn(piece.type, g.board, this.skill.lookAhead);
+      const next = this.skill.lookAhead ? g.queue[0] : null;
+      let now = this._bestOn(piece.type, g.board, next);
+      if (this.skill.mistake && now && Math.random() < this.skill.mistake) {
+        const all = this._candidates(piece.type, g.board, null);
+        if (all.length) now = all[Math.floor(Math.random() * all.length)];
+      }
       if (!g.holdUsed) {
         const alt = g.hold || g.queue[0];
         if (alt && alt !== piece.type) {
-          const other = this._bestOn(alt, g.board, false);
+          const altNext = this.skill.lookAhead ? (g.hold ? g.queue[0] : g.queue[1]) : null;
+          const other = this._bestOn(alt, g.board, altNext);
           if (other && (!now || other.score > now.score + this.skill.holdMargin)) {
             return { hold: true, score: other.score };
           }
         }
       }
       return now;
+    }
+
+    _snap(plan) {
+      const g = this.game;
+      if (!g.current || !plan) return;
+      if (plan.hold) {
+        g.holdPiece();
+        return;
+      }
+      let n = 0;
+      while (g.current && g.current.rot !== plan.rot && n++ < 5) {
+        if (!g.rotate(1)) {
+          if (!g.rotate(-1)) break;
+        }
+      }
+      n = 0;
+      while (g.current && g.current.x < plan.x && g._shift(1) && n++ < 12) {}
+      n = 0;
+      while (g.current && g.current.x > plan.x && g._shift(-1) && n++ < 12) {}
+      if (g.current) g.hardDrop();
     }
 
     update(dt) {
@@ -1364,6 +1431,11 @@
         this.phase = "move";
         if (!this.plan) {
           g.hardDrop();
+          return;
+        }
+        if (this.skill.snap) {
+          this._snap(this.plan);
+          this.plan = null;
           return;
         }
       }
