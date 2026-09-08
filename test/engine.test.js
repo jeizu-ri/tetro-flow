@@ -181,6 +181,18 @@ test("T-spin with no lines still scores and keeps back-to-back", () => {
   assert.ok(g.events.some((e) => e.type === "lineClear" && e.tspin && e.lines === 0));
 });
 
+test("holding left auto-shifts after DAS then ARR", () => {
+  const g = new E.Game({ dasMs: 80, arrMs: 20 });
+  g.start("marathon");
+  g.current = { type: "T", x: 6, y: 20, rot: 0 };
+  g.keyDown("left");
+  assert.strictEqual(g.current.x, 5);
+  g.update(80);
+  assert.strictEqual(g.current.x, 4);
+  g.update(100);
+  assert.ok(g.current.x <= 1);
+});
+
 test("random play does not throw", () => {
   for (let seed = 0; seed < 4; seed++) {
     let s = seed + 3;

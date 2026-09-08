@@ -728,14 +728,12 @@
 
     _updateDas(dt) {
       if (!this.dasDir || this.state !== "playing") return;
+      this.dasTimer += dt;
       if (!this.dasCharged) {
-        this.dasTimer += dt;
-        if (this.dasTimer >= this.dasMs) {
-          this.dasCharged = true;
-          this.dasTimer -= this.dasMs;
-          this._shift(this.dasDir);
-        }
-        return;
+        if (this.dasTimer < this.dasMs) return;
+        this.dasCharged = true;
+        this.dasTimer -= this.dasMs;
+        this._shift(this.dasDir);
       }
       if (this.arrMs <= 0) {
         while (this._shift(this.dasDir)) {}
@@ -744,7 +742,10 @@
       }
       while (this.dasTimer >= this.arrMs) {
         this.dasTimer -= this.arrMs;
-        if (!this._shift(this.dasDir)) break;
+        if (!this._shift(this.dasDir)) {
+          this.dasTimer = 0;
+          break;
+        }
       }
     }
 
