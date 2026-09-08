@@ -346,6 +346,11 @@
       this.ultraLimit = 120000;
       this.sprintGoal = 40;
       this._firstBag = true;
+      this.pendingGarbage = 0;
+      this.garbageSent = 0;
+      this.garbageReceived = 0;
+      this.garbageHole = 3;
+      this.koMode = this.mode === "battle";
       this._fillQueue();
     }
 
@@ -434,6 +439,20 @@
     }
 
     _gameOver() {
+      if (this.koMode && this.mode === "battle") {
+        this.emit({ type: "ko", score: this.score, lines: this.lines, sent: this.garbageSent });
+        this.board = emptyBoard();
+        this.pendingGarbage = 0;
+        this.current = null;
+        this.combo = -1;
+        this.fallAcc = 0;
+        this.lockTimer = 0;
+        this.lockResets = 0;
+        this.holdUsed = false;
+        this.state = "playing";
+        this._spawn();
+        return;
+      }
       this.state = "over";
       this.emit({ type: "gameOver", score: this.score, lines: this.lines });
     }
@@ -750,7 +769,7 @@
     }
 
     _gravityMs() {
-      if (this.mode === "sprint" || this.mode === "ultra") return gravityInterval(1);
+      if (this.mode === "sprint" || this.mode === "ultra" || this.mode === "battle") return gravityInterval(1);
       return gravityInterval(this.level);
     }
 
@@ -859,6 +878,7 @@
           });
         }
         this.combo = -1;
+        if (!this._flushGarbage()) return;
         this._spawn();
         return;
       }
@@ -866,7 +886,58 @@
       this._beginClear(full, spin);
     }
 
+    _attackCount(lines, tspin, mini, b2b, combo, perfect) {
+      let n = 0;
+      if (tspin && !mini) {
+        if (lines === 1) n = 2;
+        else if (lines === 2) n = 4;
+        else if (lines === 3) n = 6;
+      } else if (mini && lines === 1) n = 1;
+      else if (lines === 2) n = 1;
+      else if (lines === 3) n = 2;
+      else if (lines === 4) n = 4;
+      if (b2b && n > 0) n += 1;
+      if (combo >= 2) n += Math.min(4, Math.floor(combo / 2));
+      if (perfect) n += 4;
+      return n;
+    }
+
+    _injectGarbage(n) {
+      if (n <= 0) return true;
+      for (let y = 0; y < n; y++) {
+        for (let x = 0; x < COLS; x++) {
+          if (this.board[y][x]) return false;
+        }
+      }
+      const next = emptyBoard();
+      for (let y = n; y < ROWS; y++) {
+        for (let x = 0; x < COLS; x++) next[y - n][x] = this.board[y][x];
+      }
+      if (Math.random() < 0.35) this.garbageHole = Math.floor(Math.random() * COLS);
+      for (let i = 0; i < n; i++) {
+        const y = ROWS - n + i;
+        for (let x = 0; x < COLS; x++) {
+          if (x !== this.garbageHole) next[y][x] = { type: "G" };
+        }
+      }
+      this.board = next;
+      this.emit({ type: "garbage", n: n, hole: this.garbageHole });
+      return true;
+    }
+
+    _flushGarbage() {
+      if (this.pendingGarbage <= 0) return true;
+      const n = this.pendingGarbage;
+      this.pendingGarbage = 0;
+      if (!this._injectGarbage(n)) {
+        this._gameOver();
+        return false;
+      }
+      return true;
+    }
+
     _beginClear(rows, spin) {
+      this._pendingWin = false;
       const lines = rows.length;
       const award = scoreClear(lines, spin.tspin, spin.mini, this.level);
       let points = award.points;
@@ -928,43 +999,29 @@
         if (this.goal <= 0) {
           if (this.level >= 15) {
             this.goal = 0;
-            this.clearingRows = rows;
-            this.clearingCells = clearingCells;
-            this.clearTimer = LINE_CLEAR_MS;
-            this.state = "clearing";
             this._pendingWin = true;
-            this._pendingClear = { rows: rows, award: award, usedB2B: usedB2B, comboPts: comboPts, perfect: perfect };
-            this.emit({
-              type: "lineClear",
-              lines: lines,
-              rows: rows,
-              cells: clearingCells,
-              name: award.name,
-              points: points,
-              combo: this.combo,
-              comboPts: comboPts,
-              b2b: usedB2B,
-              tspin: spin.tspin,
-              mini: spin.mini,
-              perfect: perfect,
-              perfectPts: perfectPts,
-              level: this.level,
-            });
-            return;
+          } else {
+            this.level += 1;
+            this.goal = goalForLevel(this.level);
+            this.goalMax = this.goal;
+            this.emit({ type: "levelUp", level: this.level });
           }
-          this.level += 1;
-          this.goal = goalForLevel(this.level);
-          this.goalMax = this.goal;
-          this.emit({ type: "levelUp", level: this.level });
         }
       }
 
       this.clearingRows = rows;
       this.clearingCells = clearingCells;
-      this.clearTimer = LINE_CLEAR_MS;
-      this.state = "clearing";
-      this._pendingWin = false;
       this._pendingClear = { rows: rows };
+
+      const attack = this._attackCount(lines, spin.tspin, spin.mini, usedB2B, this.combo, perfect);
+      let send = 0;
+      let cancelled = 0;
+      if (attack > 0) {
+        cancelled = Math.min(this.pendingGarbage, attack);
+        this.pendingGarbage -= cancelled;
+        send = attack - cancelled;
+        this.garbageSent += send;
+      }
 
       this.emit({
         type: "lineClear",
@@ -981,11 +1038,19 @@
         perfect: perfect,
         perfectPts: perfectPts,
         level: this.level,
+        attack: attack,
+        send: send,
+        cancelled: cancelled,
       });
+      if (send > 0 || cancelled > 0) {
+        this.emit({ type: "attack", send: send, cancelled: cancelled, attack: attack });
+      }
 
       if (this.mode === "sprint" && this.lines >= this.sprintGoal) {
         this._pendingWin = true;
       }
+
+      this._finishClear();
     }
 
     _finishClear() {
@@ -1035,6 +1100,276 @@
       if (this.mode !== "ultra") return 0;
       return Math.max(0, this.ultraLimit - this.time);
     }
+
+    receiveGarbage(n) {
+      if (n > 0) {
+        this.pendingGarbage += n;
+        this.garbageReceived += n;
+      }
+    }
+  }
+
+  function copyBoard(board) {
+    const b = new Array(ROWS);
+    for (let y = 0; y < ROWS; y++) b[y] = board[y].slice();
+    return b;
+  }
+
+  function boardHeights(board) {
+    const h = new Array(COLS);
+    for (let x = 0; x < COLS; x++) {
+      h[x] = 0;
+      for (let y = 0; y < ROWS; y++) {
+        if (board[y][x]) {
+          h[x] = ROWS - y;
+          break;
+        }
+      }
+    }
+    return h;
+  }
+
+  function evaluateBoard(board) {
+    const heights = boardHeights(board);
+    let holes = 0;
+    let agg = 0;
+    let bump = 0;
+    for (let x = 0; x < COLS; x++) {
+      agg += heights[x];
+      let seen = false;
+      for (let y = 0; y < ROWS; y++) {
+        if (board[y][x]) seen = true;
+        else if (seen) holes += 1;
+      }
+    }
+    for (let x = 0; x < COLS - 1; x++) bump += Math.abs(heights[x] - heights[x + 1]);
+    return -holes * 85 - agg * 2.2 - bump * 3.4;
+  }
+
+  function simulatePlace(board, piece) {
+    const next = copyBoard(board);
+    const cs = cellsOf(piece);
+    for (let i = 0; i < cs.length; i++) {
+      const c = cs[i];
+      if (c.y < 0 || c.y >= ROWS || c.x < 0 || c.x >= COLS) return { score: -99999, lines: 0 };
+      next[c.y][c.x] = { type: piece.type };
+    }
+    let cleared = 0;
+    const kept = [];
+    for (let y = 0; y < ROWS; y++) {
+      let full = true;
+      for (let x = 0; x < COLS; x++) {
+        if (!next[y][x]) {
+          full = false;
+          break;
+        }
+      }
+      if (full) cleared += 1;
+      else kept.push(next[y]);
+    }
+    const out = emptyBoard();
+    let write = ROWS - 1;
+    for (let i = kept.length - 1; i >= 0; i--) {
+      out[write] = kept[i];
+      write -= 1;
+    }
+    let score = evaluateBoard(out) + cleared * 48;
+    if (cleared === 4) score += 220;
+    if (cleared === 3) score += 40;
+    if (cleared === 2) score += 12;
+    return { score: score, lines: cleared, board: out };
+  }
+
+  class TetrisBot {
+    constructor(game) {
+      this.game = game;
+      this.plan = null;
+      this.timer = 0;
+      this.actionMs = 48;
+      this.tries = 0;
+      this.pieceId = -1;
+    }
+
+    reset() {
+      this.plan = null;
+      this.timer = 0;
+      this.tries = 0;
+      this.pieceId = -1;
+    }
+
+    _search(type, board) {
+      let best = null;
+      let bestScore = -Infinity;
+      const spawnY = SPAWN[type].y;
+      const threat = this.game.pendingGarbage || 0;
+      for (let rot = 0; rot < 4; rot++) {
+        for (let x = -2; x <= 8; x++) {
+          const p = { type: type, x: x, y: spawnY, rot: rot };
+          if (collides(board, p)) continue;
+          while (!collides(board, { type: p.type, x: p.x, y: p.y + 1, rot: p.rot })) p.y += 1;
+          const sim = simulatePlace(board, p);
+          let score = sim.score;
+          if (threat > 0 && sim.lines > 0) score += sim.lines * 90 + (sim.lines >= 2 ? 50 : 0);
+          if (score > bestScore) {
+            bestScore = score;
+            best = { rot: rot, x: x, y: p.y, score: score, hold: false };
+          }
+        }
+      }
+      return best;
+    }
+
+    _best() {
+      const g = this.game;
+      const piece = g.current;
+      if (!piece) return null;
+      const now = this._search(piece.type, g.board);
+      if (!g.holdUsed) {
+        const alt = g.hold || g.queue[0];
+        if (alt && alt !== piece.type) {
+          const other = this._search(alt, g.board);
+          if (other && (!now || other.score > now.score + 18)) {
+            return { hold: true, score: other.score };
+          }
+        }
+      }
+      return now;
+    }
+
+    update(dt) {
+      const g = this.game;
+      if (g.state !== "playing" || !g.current) {
+        this.plan = null;
+        return;
+      }
+      if (this.pieceId !== g.pieceCount) {
+        this.plan = null;
+        this.pieceId = g.pieceCount;
+      }
+      this.timer += dt;
+      if (!this.plan) {
+        this.plan = this._best();
+        this.tries = 0;
+        this.timer = 0;
+        if (!this.plan) {
+          g.hardDrop();
+          return;
+        }
+      }
+      if (this.timer < this.actionMs) return;
+      this.timer = 0;
+      this.tries += 1;
+      if (this.plan.hold) {
+        g.holdPiece();
+        this.plan = null;
+        return;
+      }
+      const p = g.current;
+      if (p.rot !== this.plan.rot) {
+        if (!g.rotate(1)) g.rotate(-1);
+        if (this.tries > 10) g.hardDrop();
+        return;
+      }
+      if (p.x < this.plan.x) {
+        if (!g._shift(1)) g.hardDrop();
+        return;
+      }
+      if (p.x > this.plan.x) {
+        if (!g._shift(-1)) g.hardDrop();
+        return;
+      }
+      g.hardDrop();
+      this.plan = null;
+    }
+  }
+
+  class BattleMatch {
+    constructor() {
+      this.you = new Game();
+      this.bot = new Game();
+      this.ai = new TetrisBot(this.bot);
+      this.kosYou = 0;
+      this.kosBot = 0;
+      this.targetKos = 3;
+      this.time = 0;
+      this.limit = 120000;
+      this.state = "ready";
+      this.winner = null;
+    }
+
+    start() {
+      this.you.start("battle");
+      this.bot.start("battle");
+      this.ai.reset();
+      this.kosYou = 0;
+      this.kosBot = 0;
+      this.time = 0;
+      this.state = "playing";
+      this.winner = null;
+    }
+
+    update(dt) {
+      if (this.state !== "playing") return { you: [], bot: [] };
+      this.time += dt;
+      this.ai.update(dt);
+      this.you.update(dt);
+      this.bot.update(dt);
+      const ye = this.you.drainEvents();
+      const be = this.bot.drainEvents();
+      for (let i = 0; i < ye.length; i++) {
+        if (ye[i].type === "attack" && ye[i].send) this.bot.receiveGarbage(ye[i].send);
+        if (ye[i].type === "ko") {
+          this.kosBot += 1;
+          this.ai.reset();
+        }
+      }
+      for (let i = 0; i < be.length; i++) {
+        if (be[i].type === "attack" && be[i].send) this.you.receiveGarbage(be[i].send);
+        if (be[i].type === "ko") {
+          this.kosYou += 1;
+        }
+      }
+      if (this.kosYou >= this.targetKos) this._end("you");
+      else if (this.kosBot >= this.targetKos) this._end("bot");
+      else if (this.time >= this.limit) this._timeUp();
+      return { you: ye, bot: be };
+    }
+
+    _end(winner) {
+      this.winner = winner;
+      this.state = "over";
+      this.you.state = "over";
+      this.bot.state = "over";
+    }
+
+    _timeUp() {
+      if (this.kosYou !== this.kosBot) this._end(this.kosYou > this.kosBot ? "you" : "bot");
+      else if (this.you.garbageSent !== this.bot.garbageSent) {
+        this._end(this.you.garbageSent > this.bot.garbageSent ? "you" : "bot");
+      } else {
+        const hy = boardHeights(this.you.board).reduce(function (a, b) { return a + b; }, 0);
+        const hb = boardHeights(this.bot.board).reduce(function (a, b) { return a + b; }, 0);
+        this._end(hy <= hb ? "you" : "bot");
+      }
+    }
+
+    remainingTime() {
+      return Math.max(0, this.limit - this.time);
+    }
+
+    pause() {
+      if (this.state !== "playing") return;
+      this.state = "paused";
+      this.you.pause();
+      this.bot.pause();
+    }
+
+    resume() {
+      if (this.state !== "paused") return;
+      this.state = "playing";
+      this.you.resume();
+      this.bot.resume();
+    }
   }
 
   const api = {
@@ -1058,6 +1393,8 @@
     goalForLevel: goalForLevel,
     emptyBoard: emptyBoard,
     Game: Game,
+    TetrisBot: TetrisBot,
+    BattleMatch: BattleMatch,
     occupied: occupied,
     kicksFor: kicksFor,
   };

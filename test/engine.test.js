@@ -108,21 +108,13 @@ test("locking a tetris clears four rows and awards 800 × level", () => {
   const g = new E.Game();
   g.start("marathon");
   g.current = null;
-  for (let y = 36; y < 40; y++) {
-    for (let x = 0; x < 10; x++) {
-      if (x < 6) g.board[y][x] = { type: "Z" };
-    }
-  }
-  g.current = { type: "I", x: 5, y: 36, rot: 1 };
-  // I rot 1 cells: (7,36),(7,37),(7,38),(7,39) — need to fill cols 6,7,8,9 wait
-  // Reset: fill all but column 7
   g.board = E.emptyBoard();
   for (let y = 36; y < 40; y++) {
     for (let x = 0; x < 10; x++) {
       if (x !== 7) g.board[y][x] = { type: "Z" };
     }
   }
-  g.current = { type: "I", x: 5, y: 36, rot: 1 };
+  g.current = { type: "I", x: 5, y: 32, rot: 1 };
   g.lastRotate = false;
   g.state = "playing";
   g.hardDrop();
@@ -146,8 +138,6 @@ test("marathon completes after finishing level 15 goal", () => {
   g.current = { type: "I", x: 5, y: 32, rot: 1 };
   g.state = "playing";
   g.hardDrop();
-  assert.strictEqual(g.state, "clearing");
-  g.update(600);
   assert.strictEqual(g.state, "won");
 });
 
@@ -191,6 +181,54 @@ test("holding left auto-shifts after DAS then ARR", () => {
   assert.strictEqual(g.current.x, 4);
   g.update(100);
   assert.ok(g.current.x <= 1);
+});
+
+test("battle bot locks pieces and can send garbage", () => {
+  const match = new E.BattleMatch();
+  match.start();
+  for (let i = 0; i < 120; i++) match.update(40);
+  assert.ok(match.bot.stats.pieces >= 2);
+  assert.ok(match.you.stats.pieces >= 1);
+});
+
+test("line clears resolve immediately with no freeze", () => {
+  const g = new E.Game();
+  g.start("battle");
+  g.current = null;
+  g.board = E.emptyBoard();
+  for (let y = 36; y < 40; y++) {
+    for (let x = 0; x < 10; x++) {
+      if (x !== 7) g.board[y][x] = { type: "Z" };
+    }
+  }
+  g.current = { type: "I", x: 5, y: 32, rot: 1 };
+  g.state = "playing";
+  g.hardDrop();
+  assert.notStrictEqual(g.state, "clearing");
+  assert.strictEqual(g.lines, 4);
+  assert.ok(g.current);
+});
+
+test("battle top-out is a KO, not match over", () => {
+  const m = new E.BattleMatch();
+  m.start();
+  m.you._gameOver();
+  const ev = m.update(16);
+  assert.ok(ev.you.some((e) => e.type === "ko"));
+  assert.strictEqual(m.kosBot, 1);
+  assert.strictEqual(m.state, "playing");
+  assert.strictEqual(m.you.state, "playing");
+});
+
+test("three KOs ends the battle with a winner", () => {
+  const m = new E.BattleMatch();
+  m.start();
+  m.you._gameOver();
+  m.you._gameOver();
+  m.you._gameOver();
+  m.update(16);
+  assert.strictEqual(m.state, "over");
+  assert.strictEqual(m.winner, "bot");
 });
 
 test("random play does not throw", () => {

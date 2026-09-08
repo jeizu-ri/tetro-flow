@@ -84,7 +84,7 @@
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
   }
   function loadScores() {
-    const base = { marathon: [], sprint: [], ultra: [] };
+    const base = { battle: [], marathon: [], sprint: [], ultra: [] };
     try {
       return Object.assign(base, JSON.parse(localStorage.getItem(SCORES_KEY) || "{}"));
     } catch (e) {
@@ -678,9 +678,13 @@
     dropMap: null,
     wellPulse: 0,
     last: 0,
-    mode: "marathon",
+    mode: "battle",
+    battle: null,
+    particlesBot: null,
     intro: 0,
     running: false,
+    frozen: false,
+    matchEnded: false,
     nextSlide: 0,
     holdFlash: 0,
     piecePath: [],
@@ -692,25 +696,28 @@
   }
 
   function layout() {
-    const frame = $("well-frame");
-    const canvas = $("board");
-    const maxH = Math.min(window.innerHeight * (window.innerWidth < 860 ? 0.58 : 0.9), 880);
-    const maxW = Math.min(window.innerWidth * (window.innerWidth < 860 ? 0.72 : 0.42), 460);
-    app.cell = Math.max(16, Math.floor(Math.min(maxH / VISIBLE, maxW / COLS)));
+    const maxH = Math.min(window.innerHeight * (window.innerWidth < 900 ? 0.52 : 0.8), 760);
+    const maxW = Math.min(window.innerWidth * (window.innerWidth < 900 ? 0.42 : 0.28), 340);
+    app.cell = Math.max(12, Math.floor(Math.min(maxH / VISIBLE, maxW / COLS)));
     app.dpr = Math.min(2, window.devicePixelRatio || 1);
     const w = COLS * app.cell;
     const h = VISIBLE * app.cell;
-    canvas.width = w * app.dpr;
-    canvas.height = h * app.dpr;
-    canvas.style.width = w + "px";
-    canvas.style.height = h + "px";
-    const ctx = canvas.getContext("2d");
-    ctx.setTransform(app.dpr, 0, 0, app.dpr, 0, 0);
-    app.ctx = ctx;
+    function prep(canvas, key) {
+      if (!canvas) return;
+      canvas.width = w * app.dpr;
+      canvas.height = h * app.dpr;
+      canvas.style.width = w + "px";
+      canvas.style.height = h + "px";
+      const ctx = canvas.getContext("2d");
+      ctx.setTransform(app.dpr, 0, 0, app.dpr, 0, 0);
+      app[key] = ctx;
+    }
+    prep($("board"), "ctx");
+    prep($("board-bot"), "ctxBot");
     app.atlas.rebuild(app.cell);
     if (app.sky) app.sky.resize();
     sizePreview($("hold"), 4, 3);
-    sizePreview($("next"), 4, 16);
+    sizePreview($("next"), 4, 12);
   }
 
   function sizePreview(canvas, cw, ch) {
@@ -753,40 +760,61 @@
   }
 
   function applySettings() {
-    app.game.setDasArr(app.settings.das, app.settings.arr);
+    if (app.game) app.game.setDasArr(app.settings.das, app.settings.arr);
     app.audio.setMusic(app.settings.music / 100);
     app.audio.setSfx(app.settings.sfx / 100);
     saveSettings(app.settings);
   }
 
-  function banner(text, kind, sub) {
+  function banner(text, kind, sub, isYou) {
+    const host = isYou === false ? $("banners-bot") : $("banners");
+    if (!host) return;
     const el = document.createElement("div");
     el.className = "banner " + (kind || "");
     el.innerHTML = sub ? text + "<small>" + sub + "</small>" : text;
-    $("banners").appendChild(el);
+    host.appendChild(el);
     setTimeout(function () {
       if (el.parentNode) el.parentNode.removeChild(el);
     }, 720);
   }
 
+  function koPips(n) {
+    const max = 3;
+    const bits = [];
+    for (let i = 0; i < max; i++) bits.push(i < n ? "●" : "○");
+    return bits.join(" ");
+  }
+
   function startMode(mode) {
-    app.mode = mode;
+    app.mode = "battle";
     app.audio.unlock();
     app.audio.started = true;
     app.audio.nextNote = (app.audio.ctx && app.audio.ctx.currentTime + 0.05) || 0;
     app.particles = new Particles();
+    app.particlesBot = new Particles();
     showScreen("play");
     closeModal();
     layout();
+    app.battle = new E.BattleMatch();
+    app.game = app.battle.you;
     app.game.setDasArr(app.settings.das, app.settings.arr);
     app.running = true;
     app.frozen = true;
+    app.matchEnded = false;
     app.held = {};
     app.intro = 1.15;
     $("ready-go").classList.remove("hidden");
     $("ready-go").querySelector("span").textContent = "READY";
-    app.game.start(mode);
-    handleEvents(app.game.drainEvents());
+    const rb = $("result-banner");
+    if (rb) {
+      rb.classList.add("hidden");
+      rb.classList.remove("win", "lose");
+      rb.textContent = "";
+    }
+    $("end-title").classList.remove("win", "lose");
+    app.battle.start();
+    handleEvents(app.battle.you.drainEvents(), true);
+    handleEvents(app.battle.bot.drainEvents(), false);
     app.spin = null;
     app.slam = null;
     app.trails = [];
@@ -814,8 +842,15 @@
 
   function quitToMenu() {
     app.running = false;
-    app.game.state = "ready";
+    app.matchEnded = false;
+    if (app.battle) app.battle.state = "ready";
+    if (app.game) app.game.state = "ready";
     app.audio.started = false;
+    const rb = $("result-banner");
+    if (rb) {
+      rb.classList.add("hidden");
+      rb.textContent = "";
+    }
     showScreen("menu");
     closeModal();
     document.body.classList.remove("playing");
@@ -829,17 +864,19 @@
     return (y - HIDDEN) * app.cell;
   }
 
-  function handleEvents(events) {
+  function handleEvents(events, isYou) {
+    if (!events || !events.length) return;
     const cell = app.cell;
+    const fx = isYou ? app.particles : app.particlesBot;
     for (let i = 0; i < events.length; i++) {
       const ev = events[i];
-      if (ev.type === "move") app.audio.move();
-      if (ev.type === "rotate") {
+      if (ev.type === "move" && isYou) app.audio.move();
+      if (ev.type === "rotate" && isYou) {
         app.audio.rotate();
         const origin = ev.origin;
         app.spin = {
           age: 0,
-            dur: 0.2,
+          dur: 0.2,
           dir: ev.dir,
           kick: ev.kick,
           origin: origin,
@@ -847,203 +884,191 @@
         };
         const ox = sx(origin.x);
         const oy = sy(origin.y);
-        app.particles.swirl(ox, oy, COLORS[ev.to.type]);
-        app.particles.burst(ox, oy, "#ffffff", 10, 180);
+        fx.swirl(ox, oy, COLORS[ev.to.type]);
+        fx.burst(ox, oy, "#ffffff", 10, 180);
         if (ev.kickIndex > 0) {
           app.audio.kick();
-          app.particles.ring(ox, oy, COLORS[ev.to.type], 8);
+          fx.ring(ox, oy, COLORS[ev.to.type], 8);
           app.wellPulse = 1;
         }
         app.zoom = Math.max(app.zoom, 0.03);
       }
       if (ev.type === "hardDrop") {
-        app.audio.slam(ev.dist);
-        app.slam = { age: 0, dur: 0.18, dist: ev.dist, cells: ev.cells, from: ev.from, to: ev.to };
-        app.shake = app.settings.shake ? clamp(0.35 + ev.dist * 0.05, 0.4, 1.4) : 0;
-        app.zoom = 0.08 + Math.min(0.08, ev.dist * 0.004);
-        app.flash = 0.35;
-        app.flashColor = COLORS[ev.to.type];
-        const midX = sx(ev.to.x + 1.5);
-        const landY = sy((ev.cells[0] && ev.cells[0].y) || ev.to.y) + cell;
-        for (let d = 0; d < ev.dist; d++) {
-          app.trails.push({
-            cells: ev.cells.map(function (c) {
-              return { x: c.x, y: c.y - d, type: c.type };
-            }),
-            age: 0,
-            dur: 0.22,
-            alpha: 0.22 * (1 - d / (ev.dist + 1)),
-          });
-        }
-        app.particles.ring(midX, landY, COLORS[ev.to.type], 16);
-        app.particles.ring(midX, landY, "#fff", 6);
-        app.particles.burst(midX, landY, COLORS[ev.to.type], 26, 380);
-        app.particles.burst(midX, landY, "#fff", 10, 260);
-      }
-      if (ev.type === "lock") {
-        if (!ev.hard) app.audio.lock();
-        $("combo-chip").classList.add("hidden");
-        for (let c = 0; c < ev.cells.length; c++) {
-          app.landed.push({ cell: ev.cells[c], age: 0, dur: 0.2 });
-        }
-        if (!ev.hard) {
-          const cx = sx(ev.cells[0].x + 0.5);
-          const cy = sy(ev.cells[0].y + 0.5);
-          app.particles.burst(cx, cy, COLORS[ev.piece.type], 8, 120);
-        }
-      }
-      if (ev.type === "hold") {
-        app.audio.hold();
-        app.holdFlash = 1;
-      }
-      if (ev.type === "spawn") {
-        app.nextSlide = 1;
-        app.piecePath = [];
-        app.particles.burst(sx(5), sy(HIDDEN + 0.5), COLORS[ev.piece.type], 12, 140);
-      }
-      if (ev.type === "lineClear") {
-        const kind = ev.lines === 4 ? "tetris" : ev.tspin ? "tspin" : ev.lines ? "combo" : "";
-        banner(ev.name, kind, ev.points ? "+" + ev.points.toLocaleString() : "");
-        if (ev.b2b) banner("BACK-TO-BACK", "b2b");
-        if (ev.combo > 0) {
-          banner("COMBO x" + (ev.combo + 1), "combo");
-          app.audio.combo(ev.combo);
-          $("combo-chip").classList.remove("hidden");
-          $("combo-chip").textContent = "COMBO " + (ev.combo + 1);
-        } else $("combo-chip").classList.add("hidden");
-        if (ev.perfect) banner("PERFECT CLEAR", "perfect", "+" + ev.perfectPts);
-        if (ev.lines === 4) {
-          app.audio.tetris();
-          app.shake = app.settings.shake ? 1.6 : 0;
-          app.zoom = 0.14;
-          app.flash = 0.7;
-          app.flashColor = "#ffffff";
-          app.particles.stars(sx(5), sy(HIDDEN + 10), 50);
-        } else if (ev.tspin) {
-          app.audio.tspin();
-          app.shake = app.settings.shake ? 1.1 : 0;
-          app.flash = 0.45;
-          app.flashColor = "#9a56b5";
-          app.particles.swirl(sx(5), sy((ev.rows[0] != null ? ev.rows[0] : HIDDEN + 8)), "#9a56b5");
-        } else if (ev.lines > 0) app.audio.line(ev.lines);
-        if (ev.cells && ev.cells.length) app.particles.shards(ev.cells, app.cell, HIDDEN, COLORS);
-        for (let r = 0; r < ev.rows.length; r++) {
-          const y = sy(ev.rows[r] + 0.5);
-          app.particles.spawn({
-            type: "ring",
-            x: sx(5),
-            y: y,
-            life: 0.28,
-            max: 0.28,
-            size: 4,
-            color: "#fff",
-            grow: 8,
-          });
-          for (let x = 0; x < 10; x++) {
-            app.particles.spawn({
-              type: "spark",
-              x: sx(x + 0.5),
-              y: y,
-              vx: 0,
-              vy: 0,
-              life: 0.28,
-              max: 0.28,
-              size: app.cell * 0.18,
-              color: "#fff",
-              drag: 0,
-              g: 0,
+        if (isYou) {
+          app.audio.slam(ev.dist);
+          app.slam = { age: 0, dur: 0.18, dist: ev.dist, cells: ev.cells, from: ev.from, to: ev.to };
+          app.shake = app.settings.shake ? clamp(0.35 + ev.dist * 0.05, 0.4, 1.4) : 0;
+          app.zoom = 0.08 + Math.min(0.08, ev.dist * 0.004);
+          app.flash = 0.35;
+          app.flashColor = COLORS[ev.to.type];
+          for (let d = 0; d < ev.dist; d++) {
+            app.trails.push({
+              cells: ev.cells.map(function (c) {
+                return { x: c.x, y: c.y - d, type: c.type };
+              }),
+              age: 0,
+              dur: 0.22,
+              alpha: 0.22 * (1 - d / (ev.dist + 1)),
             });
           }
         }
-        const gained = app.game.score - app.lastScore;
-        if (gained > 0) app.particles.text(sx(5), sy(ev.rows[0]) - 8, "+" + gained, "#fff");
+        const midX = sx(ev.to.x + 1.5);
+        const landY = sy((ev.cells[0] && ev.cells[0].y) || ev.to.y) + cell;
+        fx.ring(midX, landY, COLORS[ev.to.type], 16);
+        fx.burst(midX, landY, COLORS[ev.to.type], isYou ? 26 : 12, isYou ? 380 : 220);
       }
-      if (ev.type === "levelUp") {
-        app.audio.level();
-        banner("LEVEL " + ev.level, "level");
-        app.flash = 0.4;
-        app.flashColor = "#e08a30";
+      if (ev.type === "lock") {
+        if (isYou && !ev.hard) app.audio.lock();
+        if (isYou) {
+          $("combo-chip").classList.add("hidden");
+          for (let c = 0; c < ev.cells.length; c++) {
+            app.landed.push({ cell: ev.cells[c], age: 0, dur: 0.2 });
+          }
+        }
+        if (!ev.hard && ev.cells[0]) {
+          fx.burst(sx(ev.cells[0].x + 0.5), sy(ev.cells[0].y + 0.5), COLORS[ev.piece.type], 8, 120);
+        }
       }
-      if (ev.type === "stackDrop") {
+      if (ev.type === "hold" && isYou) {
+        app.audio.hold();
+        app.holdFlash = 1;
+      }
+      if (ev.type === "spawn" && isYou) {
+        app.nextSlide = 1;
+        app.piecePath = [];
+        fx.burst(sx(5), sy(HIDDEN + 0.5), COLORS[ev.piece.type], 12, 140);
+      }
+      if (ev.type === "lineClear") {
+        const kind = ev.lines === 4 ? "tetris" : ev.tspin ? "tspin" : ev.lines ? "combo" : "";
+        banner(ev.name, kind, ev.points ? "+" + ev.points.toLocaleString() : "", isYou);
+        if (ev.b2b) banner("BACK-TO-BACK", "b2b", "", isYou);
+        if (ev.combo > 0) {
+          banner("COMBO x" + (ev.combo + 1), "combo", "", isYou);
+          if (isYou) {
+            app.audio.combo(ev.combo);
+            $("combo-chip").classList.remove("hidden");
+            $("combo-chip").textContent = "COMBO " + (ev.combo + 1);
+          }
+        } else if (isYou) $("combo-chip").classList.add("hidden");
+        if (ev.perfect) banner("PERFECT CLEAR", "perfect", "+" + ev.perfectPts, isYou);
+        if (ev.lines === 4) {
+          if (isYou) {
+            app.audio.tetris();
+            app.shake = app.settings.shake ? 1.6 : 0;
+            app.zoom = 0.14;
+            app.flash = 0.7;
+            app.flashColor = "#ffffff";
+          }
+          fx.stars(sx(5), sy(HIDDEN + 10), isYou ? 50 : 18);
+        } else if (ev.tspin) {
+          if (isYou) {
+            app.audio.tspin();
+            app.shake = app.settings.shake ? 1.1 : 0;
+            app.flash = 0.45;
+            app.flashColor = "#9a56b5";
+          }
+          fx.swirl(sx(5), sy(ev.rows[0] != null ? ev.rows[0] : HIDDEN + 8), "#9a56b5");
+        } else if (ev.lines > 0 && isYou) app.audio.line(ev.lines);
+        if (ev.cells && ev.cells.length) fx.shards(ev.cells, app.cell, HIDDEN, COLORS);
+        if (isYou) {
+          const gained = app.game.score - app.lastScore;
+          if (gained > 0 && ev.rows[0] != null) fx.text(sx(5), sy(ev.rows[0]) - 8, "+" + gained, "#fff");
+        }
+      }
+      if (ev.type === "stackDrop" && isYou) {
         app.dropMap = ev.dropFrom;
         app.stackSlide = 1;
       }
-      if (ev.type === "gameOver") {
-        app.audio.started = false;
-        app.audio.over();
-        endGame(false);
+      if (ev.type === "ko") {
+        banner("KO", isYou ? "tspin" : "tetris", "", isYou);
+        if (isYou) {
+          app.shake = app.settings.shake ? 1.4 : 0;
+          app.flash = 0.85;
+          app.flashColor = "#d24b4b";
+        }
+        fx.stars(sx(5), sy(HIDDEN + 10), 28);
       }
-      if (ev.type === "victory") {
-        app.audio.started = false;
-        app.audio.win();
-        app.particles.stars(sx(5), sy(HIDDEN + 10), 80);
-        endGame(true);
+      if (ev.type === "garbage" && isYou) {
+        app.flash = Math.max(app.flash, 0.25);
+        app.flashColor = "#e08a30";
       }
     }
-    app.lastScore = app.game.score;
+    if (isYou) app.lastScore = app.game.score;
+  }
+
+  function finishMatch() {
+    if (app.matchEnded || !app.battle) return;
+    app.matchEnded = true;
+    app.frozen = true;
+    const win = app.battle.winner === "you";
+    const rb = $("result-banner");
+    if (rb) {
+      rb.classList.remove("hidden");
+      rb.classList.toggle("win", win);
+      rb.classList.toggle("lose", !win);
+      rb.textContent = win ? "YOU WIN" : "YOU LOST";
+    }
+    app.audio.started = false;
+    if (win) {
+      app.audio.win();
+      app.particles.stars(sx(5), sy(HIDDEN + 10), 80);
+    } else {
+      app.audio.over();
+    }
+    setTimeout(function () {
+      if (!app.running || !app.matchEnded) return;
+      endGame(win);
+    }, 900);
   }
 
   function endGame(win) {
     const g = app.game;
+    const b = app.battle;
     const scores = loadScores();
-    const rec = {
-      score: g.score,
-      lines: g.lines,
-      level: g.level,
-      time: g.time,
-      date: Date.now(),
+    if (!scores.battle) scores.battle = [];
+    scores.battle.unshift({
       win: win,
-    };
-    if (g.mode === "marathon") {
-      scores.marathon.unshift(rec);
-      scores.marathon = scores.marathon.slice(0, 8);
-    } else if (g.mode === "sprint") {
-      if (win) {
-        scores.sprint.unshift(rec);
-        scores.sprint.sort(function (a, b) {
-          return a.time - b.time;
-        });
-        scores.sprint = scores.sprint.slice(0, 8);
-      }
-    } else {
-      if (win || g.mode === "ultra") {
-        scores.ultra.unshift(rec);
-        scores.ultra.sort(function (a, b) {
-          return b.score - a.score;
-        });
-        scores.ultra = scores.ultra.slice(0, 8);
-      }
-    }
+      kos: b ? b.kosYou : 0,
+      kosAgainst: b ? b.kosBot : 0,
+      sent: g.garbageSent || 0,
+      lines: g.lines,
+      time: b ? b.time : g.time,
+      date: Date.now(),
+    });
+    scores.battle = scores.battle.slice(0, 10);
     saveScores(scores);
-    $("end-kicker").textContent = win ? "CLEAR" : "TOP OUT";
-    $("end-title").textContent = win
-      ? g.mode === "sprint"
-        ? formatTime(g.time)
-        : "You made it"
-      : "Game over";
+    $("end-kicker").textContent = "BATTLE 2P";
+    $("end-title").textContent = win ? "YOU WIN" : "YOU LOST";
+    $("end-title").classList.toggle("win", win);
+    $("end-title").classList.toggle("lose", !win);
+    const kosYou = b ? b.kosYou : 0;
+    const kosBot = b ? b.kosBot : 0;
     $("end-stats").innerHTML =
-      "<div>Score <strong>" +
-      g.score.toLocaleString() +
+      "<div>Result <strong>" +
+      (win ? "WIN" : "LOSS") +
+      "</strong></div><div>KOs <strong>" +
+      kosYou +
+      " – " +
+      kosBot +
+      "</strong></div><div>Sent <strong>" +
+      (g.garbageSent || 0) +
+      "</strong></div><div>Incoming <strong>" +
+      (g.garbageReceived || 0) +
       "</strong></div><div>Lines <strong>" +
       g.lines +
-      "</strong></div><div>Level <strong>" +
-      g.level +
       "</strong></div><div>Time <strong>" +
-      formatTime(g.time) +
+      formatClock(b ? Math.min(b.time, b.limit) : g.time) +
       "</strong></div><div>Tetrises <strong>" +
       g.stats.tetrises +
-      "</strong></div><div>T-Spins <strong>" +
-      g.stats.tspins +
       "</strong></div><div>Max combo <strong>" +
       g.stats.maxCombo +
-      "</strong></div><div>Pieces <strong>" +
-      g.stats.pieces +
       "</strong></div>";
     openModal("end");
   }
 
   function renderScores() {
     const s = loadScores();
+    const battle = s.battle || [];
     function list(arr, fmt) {
       if (!arr.length) return "<p>No records yet.</p>";
       return arr
@@ -1053,38 +1078,28 @@
         .join("");
     }
     $("scoreboard").innerHTML =
-      "<h3>Marathon</h3>" +
-      list(s.marathon, function (r) {
-        return r.score.toLocaleString() + " pts · L" + r.level;
-      }) +
-      "<h3>Sprint</h3>" +
-      list(s.sprint, function (r) {
-        return formatTime(r.time);
-      }) +
-      "<h3>Ultra</h3>" +
-      list(s.ultra, function (r) {
-        return r.score.toLocaleString() + " pts";
+      "<h3>Battle 2P</h3>" +
+      list(battle, function (r) {
+        return (r.win ? "WIN" : "LOSS") + " · KO " + (r.kos || 0) + "–" + (r.kosAgainst || 0) + " · sent " + (r.sent || 0);
       });
   }
 
   function updateHud() {
     const g = app.game;
-    $("stat-score").textContent = g.score.toLocaleString();
-    $("stat-level").textContent = g.mode === "marathon" ? g.level : "—";
-    $("stat-lines").textContent = g.lines;
-    if (g.mode === "ultra") $("stat-time").textContent = formatClock(g.remainingTime());
-    else $("stat-time").textContent = formatClock(g.time);
-    if (g.mode === "marathon") {
-      $("stat-goal-wrap").style.display = "";
-      $("stat-goal").textContent = Math.max(0, g.goal);
-      const pct = g.goalMax ? (1 - g.goal / g.goalMax) * 100 : 0;
-      $("goal-fill").style.width = clamp(pct, 0, 100) + "%";
-    } else {
-      $("stat-goal-wrap").style.display = "none";
-      $("goal-fill").style.width = g.mode === "sprint" ? clamp((g.lines / 40) * 100, 0, 100) + "%" : "100%";
+    const b = app.battle;
+    if ($("stat-sent")) $("stat-sent").textContent = g.garbageSent || 0;
+    if ($("stat-in")) $("stat-in").textContent = g.pendingGarbage || 0;
+    if ($("stat-lines")) $("stat-lines").textContent = g.lines;
+    if ($("stat-time")) {
+      $("stat-time").textContent = b ? formatClock(b.remainingTime()) : "2:00";
     }
+    if ($("ko-you") && b) $("ko-you").textContent = koPips(b.kosYou);
+    if ($("ko-bot") && b) $("ko-bot").textContent = koPips(b.kosBot);
     const color = g.current ? COLORS[g.current.type] : "#3d6bc4";
-    $("well-ring").style.borderColor = color;
+    if ($("well-ring")) $("well-ring").style.borderColor = color;
+    const bot = b && b.bot;
+    const botColor = bot && bot.current ? COLORS[bot.current.type] : "#d24b4b";
+    if ($("well-ring-bot")) $("well-ring-bot").style.borderColor = botColor;
   }
 
   function drawPreviewStack(canvas, types, dim) {
@@ -1129,9 +1144,19 @@
     }
   }
 
-  function drawBoard(dt) {
-    const ctx = app.ctx;
-    const g = app.game;
+  function drawGarbageMeter(ctx, n, w, h) {
+    if (n <= 0) return;
+    const barH = Math.max(5, app.cell * 0.38);
+    ctx.fillStyle = "rgba(0,0,0,0.4)";
+    ctx.fillRect(w - 9, 0, 9, h);
+    for (let i = 0; i < Math.min(n, 22); i++) {
+      ctx.fillStyle = i >= 8 ? "#d24b4b" : "#e08a30";
+      ctx.fillRect(w - 8, h - (i + 1) * barH - 1, 7, barH - 1);
+    }
+  }
+
+  function drawBoard(ctx, game, fancy) {
+    if (!ctx || !game) return;
     const cell = app.cell;
     const w = COLS * cell;
     const h = VISIBLE * cell;
@@ -1158,27 +1183,27 @@
       ctx.stroke();
     }
 
-    const clearing = {};
-    for (let i = 0; i < g.clearingRows.length; i++) clearing[g.clearingRows[i]] = true;
-    const clearPulse = g.state === "clearing" ? 0.5 + 0.5 * Math.sin(g.clearTimer * 0.04) : 0;
+    const particles = fancy ? app.particles : app.particlesBot;
+    const trails = fancy ? app.trails : [];
+    const landed = fancy ? app.landed : [];
+    const stackSlide = fancy ? app.stackSlide : 0;
+    const dropMap = fancy ? app.dropMap : null;
+    const flash = fancy ? app.flash : 0;
+    const flashColor = fancy ? app.flashColor : "#fff";
+    const piecePath = fancy ? app.piecePath : [];
 
     for (let y = HIDDEN; y < E.ROWS; y++) {
       for (let x = 0; x < COLS; x++) {
-        const block = g.board[y][x];
+        const block = game.board[y][x];
         if (!block) continue;
-        if (clearing[y]) {
-          ctx.fillStyle = withAlpha("#fff4c2", 0.45 + clearPulse * 0.4);
-          ctx.fillRect(sx(x), sy(y), cell, cell);
-          continue;
-        }
         let dy = 0;
-        if (app.stackSlide > 0 && app.dropMap) {
-          const dist = app.dropMap[y] || 0;
-          dy = -dist * cell * easeOutCubic(app.stackSlide);
+        if (stackSlide > 0 && dropMap) {
+          const dist = dropMap[y] || 0;
+          dy = -dist * cell * easeOutCubic(stackSlide);
         }
         let squash = 1;
-        for (let k = 0; k < app.landed.length; k++) {
-          const L = app.landed[k];
+        for (let k = 0; k < landed.length; k++) {
+          const L = landed[k];
           if (L.cell.x === x && L.cell.y === y) {
             const t = clamp(L.age / L.dur, 0, 1);
             squash = 1 - 0.22 * Math.sin(t * Math.PI);
@@ -1194,13 +1219,13 @@
       }
     }
 
-    if (g.current && app.settings.ghost && g.state === "playing") {
-      const ghost = g.ghost();
+    if (game.current && app.settings.ghost && game.state === "playing") {
+      const ghost = game.ghost();
       ctx.save();
       for (let i = 0; i < ghost.length; i++) {
         const c = ghost[i];
         if (c.y < HIDDEN) continue;
-        ctx.strokeStyle = withAlpha(COLORS[c.type], 0.55);
+        ctx.strokeStyle = withAlpha(COLORS[c.type], fancy ? 0.55 : 0.35);
         ctx.lineWidth = 2;
         roundRect(ctx, sx(c.x) + 3, sy(c.y) + 3, cell - 6, cell - 6, 5);
         ctx.stroke();
@@ -1210,8 +1235,8 @@
       ctx.restore();
     }
 
-    for (let i = 0; i < app.trails.length; i++) {
-      const tr = app.trails[i];
+    for (let i = 0; i < trails.length; i++) {
+      const tr = trails[i];
       const a = (1 - tr.age / tr.dur) * (tr.alpha || 0.2);
       for (let k = 0; k < tr.cells.length; k++) {
         const c = tr.cells[k];
@@ -1220,9 +1245,9 @@
       }
     }
 
-    for (let i = 0; i < app.piecePath.length; i++) {
-      const snap = app.piecePath[i];
-      const a = (i / app.piecePath.length) * 0.18;
+    for (let i = 0; i < piecePath.length; i++) {
+      const snap = piecePath[i];
+      const a = (i / piecePath.length) * 0.18;
       ctx.save();
       ctx.globalAlpha = a;
       for (let k = 0; k < snap.length; k++) {
@@ -1234,27 +1259,32 @@
       ctx.restore();
     }
 
-    if (g.current) {
-      drawActive(ctx, g.current, cell);
+    if (game.current) {
+      if (fancy) drawActive(ctx, game.current, cell);
+      else drawActiveSimple(ctx, game.current, cell);
     }
 
-    if (g.state === "clearing") {
-      ctx.save();
-      const pulse = 0.35 + 0.65 * Math.abs(Math.sin((500 - g.clearTimer) * 0.02));
-      for (let i = 0; i < g.clearingRows.length; i++) {
-        const y = sy(g.clearingRows[i]);
-        ctx.fillStyle = "rgba(255, 236, 150," + 0.55 * pulse + ")";
-        ctx.fillRect(0, y + cell * 0.38, w, cell * 0.24);
-      }
-      ctx.restore();
-    }
-
-    if (app.flash > 0) {
-      ctx.fillStyle = withAlpha(app.flashColor, app.flash * 0.28);
+    if (flash > 0) {
+      ctx.fillStyle = withAlpha(flashColor, flash * 0.28);
       ctx.fillRect(0, 0, w, h);
     }
 
-    app.particles.draw(ctx);
+    drawGarbageMeter(ctx, game.pendingGarbage || 0, w, h);
+    if (particles) particles.draw(ctx);
+  }
+
+  function drawActiveSimple(ctx, piece, cell) {
+    const cells = E.cellsOf(piece);
+    ctx.save();
+    ctx.shadowColor = "rgba(0,0,0,0.28)";
+    ctx.shadowBlur = 6;
+    ctx.shadowOffsetY = 3;
+    for (let i = 0; i < cells.length; i++) {
+      const c = cells[i];
+      if (c.y < HIDDEN - 1) continue;
+      app.atlas.draw(ctx, piece.type, sx(c.x), sy(c.y), cell, 1);
+    }
+    ctx.restore();
   }
 
   function drawActive(ctx, piece, cell) {
@@ -1316,16 +1346,18 @@
       app.sky.draw(!$("menu").classList.contains("hidden") ? false : true);
     }
 
-    if (app.running && app.game.state !== "paused") {
+    if (app.running && app.battle && app.battle.state !== "paused") {
       if (app.intro > 0) {
         app.intro -= dts;
         if (app.intro <= 0.45 && $("ready-go").querySelector("span").textContent === "READY") {
           actuallyStart();
         }
       }
-      if (!app.frozen && (app.game.state === "playing" || app.game.state === "clearing")) {
-        app.game.update(dt);
-        handleEvents(app.game.drainEvents());
+      if (!app.frozen && app.battle.state === "playing") {
+        const ev = app.battle.update(dt);
+        handleEvents(ev.you, true);
+        handleEvents(ev.bot, false);
+        if (app.battle.state === "over") finishMatch();
       }
     }
 
@@ -1359,6 +1391,7 @@
     } else app.piecePath = [];
 
     app.particles.update(dts);
+    if (app.particlesBot) app.particlesBot.update(dts);
     if (app.audio.started) app.audio.tickMusic();
 
     if (!$("play").classList.contains("hidden") && app.ctx) {
@@ -1366,7 +1399,8 @@
       const ox = (Math.random() * 2 - 1) * sh * 10;
       const oy = (Math.random() * 2 - 1) * sh * 10;
       $("well-frame").style.transform = "translate(" + ox + "px," + oy + "px) scale(" + (1 + app.zoom) + ")";
-      drawBoard(dts);
+      drawBoard(app.ctx, app.game, true);
+      if (app.ctxBot && app.battle) drawBoard(app.ctxBot, app.battle.bot, false);
       updateHud();
       drawPreviewStack($("next"), app.game.nextPieces(5), false);
       drawPreviewStack($("hold"), [app.game.hold], app.game.holdUsed);
@@ -1398,7 +1432,8 @@
       b.onclick = closeModal;
     });
     $("btn-resume").onclick = function () {
-      app.game.resume();
+      if (app.battle) app.battle.resume();
+      else app.game.resume();
       closeModal();
     };
     $("btn-quit").onclick = quitToMenu;
@@ -1431,7 +1466,7 @@
     window.addEventListener("keydown", function (e) {
       app.audio.unlock();
       if (e.code === "Enter" && !$("menu").classList.contains("hidden")) {
-        startMode("marathon");
+        startMode("battle");
         return;
       }
       if (e.code === "KeyM") {
@@ -1443,11 +1478,12 @@
       if (e.repeat) return;
       e.preventDefault();
       if (act === "pause") {
-        if (app.game.state === "playing" || app.game.state === "clearing") {
-          app.game.pause();
+        if (!app.battle) return;
+        if (app.battle.state === "playing") {
+          app.battle.pause();
           openModal("pause");
-        } else if (app.game.state === "paused") {
-          app.game.resume();
+        } else if (app.battle.state === "paused") {
+          app.battle.resume();
           closeModal();
         }
         return;
@@ -1481,17 +1517,15 @@
     });
 
     document.addEventListener("visibilitychange", function () {
-      if (document.hidden && (app.game.state === "playing" || app.game.state === "clearing")) {
-        app.game.pause();
+      if (document.hidden && app.battle && app.battle.state === "playing") {
+        app.battle.pause();
         openModal("pause");
       }
     });
 
     applySettings();
     const bootMode = new URLSearchParams(location.search).get("mode");
-    if (bootMode === "marathon" || bootMode === "sprint" || bootMode === "ultra") {
-      startMode(bootMode);
-    }
+    if (bootMode === "battle") startMode("battle");
     requestAnimationFrame(tick);
   }
 
