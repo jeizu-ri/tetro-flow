@@ -55,11 +55,9 @@
             <span class="panel-label">Hold</span>
             <canvas id="hold" width="160" height="120"></canvas>
           </div>
-          <div class="panel">
-            <span class="panel-label">Next</span>
-            <canvas id="next" width="160" height="280"></canvas>
-          </div>
           <div class="panel stats-panel">
+            <div class="stat"><span>Score</span><strong id="stat-score">0</strong></div>
+            <div class="stat"><span>Level</span><strong id="stat-level">1</strong></div>
             <div class="stat"><span>Sent</span><strong id="stat-sent">0</strong></div>
             <div class="stat"><span>Incoming</span><strong id="stat-in">0</strong></div>
             <div class="stat"><span>Lines</span><strong id="stat-lines">0</strong></div>
@@ -99,6 +97,13 @@
           </div>
           <div id="result-banner" class="hidden"></div>
         </div>
+
+        <aside class="hud-col right">
+          <div class="panel">
+            <span class="panel-label">Next</span>
+            <canvas id="next" width="160" height="320"></canvas>
+          </div>
+        </aside>
       </section>
     </div>
 
@@ -116,8 +121,10 @@
       <div class="modal" id="modal-how">
         <h2>How to play</h2>
         <p>
-          Battle 2P, Tetris Friends style: you and a bot on two boards. Line clears send garbage
-          (doubles, triples, Tetrises, T-spins, back-to-back, and combos). Incoming garbage can be
+          Battle 2P, Tetris Friends style: Hold on the left, Next on the right, 10×20 wells.
+          SRS rotations, guideline scoring (T-Spin Double is 1200 × level, back-to-back ×1.5).
+          Level up every 10 lines — gravity and points both climb. Line clears send garbage
+          (doubles, triples, Tetrises, T-spins, back-to-back, combos). Incoming garbage can be
           cancelled by attacking. First to <strong>3 KOs</strong> wins. If 2:00 runs out, KOs, then
           garbage sent, then stack height decide it.
         </p>

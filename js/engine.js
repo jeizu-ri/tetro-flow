@@ -769,7 +769,6 @@
     }
 
     _gravityMs() {
-      if (this.mode === "sprint" || this.mode === "ultra" || this.mode === "battle") return gravityInterval(1);
       return gravityInterval(this.level);
     }
 
@@ -892,13 +891,13 @@
         if (lines === 1) n = 2;
         else if (lines === 2) n = 4;
         else if (lines === 3) n = 6;
-      } else if (mini && lines === 1) n = 1;
-      else if (lines === 2) n = 1;
+      } else if (lines === 2) n = 1;
       else if (lines === 3) n = 2;
       else if (lines === 4) n = 4;
       if (b2b && n > 0) n += 1;
-      if (combo >= 2) n += Math.min(4, Math.floor(combo / 2));
-      if (perfect) n += 4;
+      const comboExtra = [0, 0, 1, 1, 1, 3, 3, 4, 4, 4, 4, 5];
+      if (combo >= 0) n += comboExtra[Math.min(combo, comboExtra.length - 1)];
+      if (perfect) n += 10;
       return n;
     }
 
@@ -1006,6 +1005,12 @@
             this.goalMax = this.goal;
             this.emit({ type: "levelUp", level: this.level });
           }
+        }
+      } else if (this.mode === "battle") {
+        const nextLevel = Math.min(15, 1 + Math.floor(this.lines / 10));
+        if (nextLevel > this.level) {
+          this.level = nextLevel;
+          this.emit({ type: "levelUp", level: this.level });
         }
       }
 
@@ -1185,7 +1190,10 @@
       this.game = game;
       this.plan = null;
       this.timer = 0;
-      this.actionMs = 48;
+      this.actionMs = 160;
+      this.thinkMs = 420;
+      this.dropWait = 220;
+      this.phase = "think";
       this.tries = 0;
       this.pieceId = -1;
     }
@@ -1193,8 +1201,18 @@
     reset() {
       this.plan = null;
       this.timer = 0;
+      this.phase = "think";
       this.tries = 0;
       this.pieceId = -1;
+    }
+
+    _pace() {
+      const lv = this.game.level || 1;
+      return {
+        think: Math.max(200, 460 - lv * 16) + Math.random() * 120,
+        action: Math.max(95, 175 - lv * 5),
+        drop: Math.max(90, 240 - lv * 8),
+      };
     }
 
     _search(type, board) {
@@ -1228,7 +1246,7 @@
         const alt = g.hold || g.queue[0];
         if (alt && alt !== piece.type) {
           const other = this._search(alt, g.board);
-          if (other && (!now || other.score > now.score + 18)) {
+          if (other && (!now || other.score > now.score + 40)) {
             return { hold: true, score: other.score };
           }
         }
@@ -1245,29 +1263,45 @@
       if (this.pieceId !== g.pieceCount) {
         this.plan = null;
         this.pieceId = g.pieceCount;
+        this.phase = "think";
+        this.timer = 0;
+        this.tries = 0;
+        const pace = this._pace();
+        this.thinkMs = pace.think;
+        this.actionMs = pace.action;
+        this.dropWait = pace.drop;
       }
       this.timer += dt;
-      if (!this.plan) {
+      if (this.phase === "think") {
+        if (this.timer < this.thinkMs) return;
         this.plan = this._best();
-        this.tries = 0;
         this.timer = 0;
+        this.phase = "move";
         if (!this.plan) {
           g.hardDrop();
           return;
         }
       }
-      if (this.timer < this.actionMs) return;
-      this.timer = 0;
-      this.tries += 1;
+      if (!this.plan) return;
       if (this.plan.hold) {
+        if (this.timer < this.actionMs) return;
         g.holdPiece();
         this.plan = null;
         return;
       }
+      if (this.phase === "drop") {
+        if (this.timer < this.dropWait) return;
+        g.hardDrop();
+        this.plan = null;
+        return;
+      }
+      if (this.timer < this.actionMs) return;
+      this.timer = 0;
+      this.tries += 1;
       const p = g.current;
       if (p.rot !== this.plan.rot) {
         if (!g.rotate(1)) g.rotate(-1);
-        if (this.tries > 10) g.hardDrop();
+        if (this.tries > 12) g.hardDrop();
         return;
       }
       if (p.x < this.plan.x) {
@@ -1278,8 +1312,8 @@
         if (!g._shift(-1)) g.hardDrop();
         return;
       }
-      g.hardDrop();
-      this.plan = null;
+      this.phase = "drop";
+      this.timer = 0;
     }
   }
 

@@ -696,9 +696,12 @@
   }
 
   function layout() {
-    const maxH = Math.min(window.innerHeight * (window.innerWidth < 900 ? 0.52 : 0.8), 760);
-    const maxW = Math.min(window.innerWidth * (window.innerWidth < 900 ? 0.42 : 0.28), 340);
-    app.cell = Math.max(12, Math.floor(Math.min(maxH / VISIBLE, maxW / COLS)));
+    const mobile = window.innerWidth < 980;
+    const chromeY = mobile ? 158 : 52;
+    const chromeX = mobile ? 20 : 430;
+    const maxH = Math.max(320, window.innerHeight - chromeY);
+    const maxW = Math.max(200, (window.innerWidth - chromeX) / 2);
+    app.cell = Math.max(18, Math.min(42, Math.floor(maxH / VISIBLE), Math.floor(maxW / COLS)));
     app.dpr = Math.min(2, window.devicePixelRatio || 1);
     const w = COLS * app.cell;
     const h = VISIBLE * app.cell;
@@ -717,7 +720,7 @@
     app.atlas.rebuild(app.cell);
     if (app.sky) app.sky.resize();
     sizePreview($("hold"), 4, 3);
-    sizePreview($("next"), 4, 12);
+    sizePreview($("next"), 4, 16);
   }
 
   function sizePreview(canvas, cw, ch) {
@@ -873,25 +876,27 @@
       if (ev.type === "move" && isYou) app.audio.move();
       if (ev.type === "rotate" && isYou) {
         app.audio.rotate();
-        const origin = ev.origin;
-        app.spin = {
-          age: 0,
-          dur: 0.2,
-          dir: ev.dir,
-          kick: ev.kick,
-          origin: origin,
-          type: ev.to.type,
-        };
-        const ox = sx(origin.x);
-        const oy = sy(origin.y);
+        if (ev.to.type !== "O") {
+          const origin = ev.origin;
+          app.spin = {
+            age: 0,
+            dur: 0.1,
+            dir: ev.dir,
+            kick: ev.kick,
+            origin: origin,
+            type: ev.to.type,
+          };
+        }
+        const ox = sx(ev.origin.x);
+        const oy = sy(ev.origin.y);
         fx.swirl(ox, oy, COLORS[ev.to.type]);
-        fx.burst(ox, oy, "#ffffff", 10, 180);
+        fx.burst(ox, oy, "#ffffff", 8, 160);
         if (ev.kickIndex > 0) {
           app.audio.kick();
           fx.ring(ox, oy, COLORS[ev.to.type], 8);
           app.wellPulse = 1;
         }
-        app.zoom = Math.max(app.zoom, 0.03);
+        app.zoom = Math.max(app.zoom, 0.02);
       }
       if (ev.type === "hardDrop") {
         if (isYou) {
@@ -992,6 +997,14 @@
         app.flash = Math.max(app.flash, 0.25);
         app.flashColor = "#e08a30";
       }
+      if (ev.type === "levelUp") {
+        if (isYou) {
+          app.audio.level();
+          banner("LEVEL " + ev.level, "level");
+          app.flash = 0.4;
+          app.flashColor = "#e08a30";
+        }
+      }
     }
     if (isYou) app.lastScore = app.game.score;
   }
@@ -1054,6 +1067,8 @@
       (g.garbageSent || 0) +
       "</strong></div><div>Incoming <strong>" +
       (g.garbageReceived || 0) +
+      "</strong></div><div>Level <strong>" +
+      g.level +
       "</strong></div><div>Lines <strong>" +
       g.lines +
       "</strong></div><div>Time <strong>" +
@@ -1087,6 +1102,8 @@
   function updateHud() {
     const g = app.game;
     const b = app.battle;
+    if ($("stat-score")) $("stat-score").textContent = g.score.toLocaleString();
+    if ($("stat-level")) $("stat-level").textContent = g.level;
     if ($("stat-sent")) $("stat-sent").textContent = g.garbageSent || 0;
     if ($("stat-in")) $("stat-in").textContent = g.pendingGarbage || 0;
     if ($("stat-lines")) $("stat-lines").textContent = g.lines;
@@ -1102,14 +1119,15 @@
     if ($("well-ring-bot")) $("well-ring-bot").style.borderColor = botColor;
   }
 
-  function drawPreviewStack(canvas, types, dim) {
+  function drawPreviewStack(canvas, types, dim, isHold) {
+    if (!canvas) return;
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     const ctx = canvas.getContext("2d");
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     const w = canvas.width / dpr;
     const h = canvas.height / dpr;
     ctx.clearRect(0, 0, w, h);
-    const size = Math.min(24, Math.floor(w / 4.2));
+    const size = Math.min(isHold ? 26 : 22, Math.floor(w / 4.2));
     const slot = types.length > 1 ? h / Math.max(types.length, 1) : h;
     for (let i = 0; i < types.length; i++) {
       const type = types[i];
@@ -1132,10 +1150,10 @@
         i * slot +
         (slot - bh * size) / 2 -
         minY * size +
-        (i === 0 ? app.nextSlide * -14 : 0);
+        (!isHold && i === 0 ? app.nextSlide * -14 : 0);
       ctx.save();
       let alpha = dim ? 0.35 : i === 0 ? 1 : 0.82;
-      if (i === 0 && app.holdFlash) alpha = 0.35 + 0.65 * (1 - app.holdFlash);
+      if (isHold && app.holdFlash) alpha = 0.35 + 0.65 * (1 - app.holdFlash);
       ctx.globalAlpha = alpha;
       for (let k = 0; k < shape.length; k++) {
         app.atlas.draw(ctx, type, ox + shape[k][0] * size, oy + shape[k][1] * size, size, alpha);
@@ -1300,8 +1318,8 @@
       angle = app.spin.dir * (Math.PI / 2) * (e - 1);
       kx = -app.spin.kick.x * (1 - e) * cell;
       ky = -app.spin.kick.y * (1 - e) * cell;
-      scale = 1 + 0.12 * Math.sin(t * Math.PI);
-      const ghostAngles = [0.35, 0.6, 0.82];
+      scale = 1 + 0.04 * Math.sin(t * Math.PI);
+      const ghostAngles = [0.55, 0.78];
       for (let i = 0; i < ghostAngles.length; i++) {
         const ga = app.spin.dir * (Math.PI / 2) * (ghostAngles[i] * easeOutBack(t) - 1);
         ctx.save();
@@ -1323,7 +1341,7 @@
     ctx.save();
     ctx.translate(sx(origin.x) + kx, sy(origin.y) + ky);
     ctx.rotate(angle);
-    ctx.scale(scale, 2 - scale);
+    ctx.scale(scale, scale);
     ctx.translate(-sx(origin.x), -sy(origin.y));
     ctx.shadowColor = "rgba(0,0,0,0.28)";
     ctx.shadowBlur = 6;
@@ -1402,8 +1420,8 @@
       drawBoard(app.ctx, app.game, true);
       if (app.ctxBot && app.battle) drawBoard(app.ctxBot, app.battle.bot, false);
       updateHud();
-      drawPreviewStack($("next"), app.game.nextPieces(5), false);
-      drawPreviewStack($("hold"), [app.game.hold], app.game.holdUsed);
+      drawPreviewStack($("next"), app.game.nextPieces(5), false, false);
+      drawPreviewStack($("hold"), [app.game.hold], app.game.holdUsed, true);
     }
 
     requestAnimationFrame(tick);

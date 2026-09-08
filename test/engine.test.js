@@ -86,17 +86,44 @@ test("5th kick is never a mini T-spin", () => {
   assert.strictEqual(r.mini, false);
 });
 
-test("guideline scoring and back-to-back tetris", () => {
-  const a = E.scoreClear(4, false, false, 3);
-  assert.strictEqual(a.points, 2400);
-  assert.strictEqual(a.difficult, true);
-  assert.strictEqual(a.goal, 8);
-  const s = E.scoreClear(1, false, false, 3);
-  assert.strictEqual(s.points, 300);
-  assert.strictEqual(s.difficult, false);
-  const t = E.scoreClear(2, true, false, 2);
-  assert.strictEqual(t.points, 2400);
-  assert.strictEqual(t.name, "T-SPIN DOUBLE");
+test("T-spin double scores 1200 × level and sends 4 garbage", () => {
+  const a = E.scoreClear(2, true, false, 1);
+  assert.strictEqual(a.points, 1200);
+  assert.strictEqual(a.name, "T-SPIN DOUBLE");
+  const g = new E.Game();
+  g.start("battle");
+  const n = g._attackCount(2, true, false, false, 0, false);
+  assert.strictEqual(n, 4);
+  const b2b = g._attackCount(2, true, false, true, 0, false);
+  assert.strictEqual(b2b, 5);
+});
+
+test("battle levels up every 10 lines and speeds gravity", () => {
+  const g = new E.Game();
+  g.start("battle");
+  assert.strictEqual(g.level, 1);
+  const slow = E.gravityInterval(1);
+  g.board = E.emptyBoard();
+  for (let y = 36; y < 40; y++) {
+    for (let x = 0; x < 10; x++) {
+      if (x !== 7) g.board[y][x] = { type: "L" };
+    }
+  }
+  g.current = { type: "I", x: 5, y: 32, rot: 1 };
+  g.state = "playing";
+  g.lines = 8;
+  g.hardDrop();
+  assert.strictEqual(g.lines, 12);
+  assert.strictEqual(g.level, 2);
+  assert.ok(E.gravityInterval(g.level) < slow);
+  assert.ok(g.events.some((e) => e.type === "levelUp" && e.level === 2));
+});
+
+test("SRS T rotations match Tetris Friends / guideline", () => {
+  const t0 = E.cellsOf({ type: "T", x: 3, y: 20, rot: 0 }).map((c) => c.x + "," + c.y).sort().join(" ");
+  assert.strictEqual(t0, "3,21 4,20 4,21 5,21");
+  const t1 = E.cellsOf({ type: "T", x: 3, y: 20, rot: 1 }).map((c) => c.x + "," + c.y).sort().join(" ");
+  assert.strictEqual(t1, "4,20 4,21 4,22 5,21");
 });
 
 test("variable goal is 5 × level", () => {

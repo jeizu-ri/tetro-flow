@@ -2,7 +2,7 @@
 
 A Tetris Friends–style **Battle 2P** game: you vs a bot on two boards. Bright toy-plastic look, not a neon overlay.
 
-The board slams, pieces spin, and line clears pop — same juice, daylight clothes.
+Hold sits on the **left**, Next on the **right**, 10×20 wells at standard size. Pieces use **SRS** rotations. Scoring is guideline / Tetris Friends (T-Spin Double is `1200 × level`).
 
 ## Play
 
@@ -20,9 +20,11 @@ You and **Rival Bot** play at the same time.
 
 - First to **3 KOs** wins the set
 - If the **2:00** buzzer hits first, winner is decided by KOs, then garbage sent, then stack height
+- **Level** goes up every 10 lines (max 15). Gravity and points both scale
 - Doubles, triples, Tetrises, T-spins, back-to-back, combos, and perfect clears send garbage
+- T-Spin Double sends **4** lines (5 with back-to-back)
 - Incoming garbage is cancelled by your own attacks
-- Topping out is a KO: the board resets and the match continues until someone takes 3
+- Topping out is a KO: the board resets and the set keeps going
 - Line clears are instant (no freeze frame)
 
 ## Guideline feel
@@ -30,7 +32,7 @@ You and **Rival Bot** play at the same time.
 - 10×20 visible well with hidden buffer
 - SRS wall kicks (including I-kicks and T-spin triples)
 - 7-bag; the first piece of a game is never S, Z, or O
-- Hold once per piece
+- Hold once per piece, 5 next pieces
 - 500ms lock delay, move-reset, 15-reset cap
 - No ARE, no line-clear delay
 - Soft drop 1 point per cell, hard drop 2
