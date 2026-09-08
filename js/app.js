@@ -351,7 +351,7 @@
       }
     }
     stars(x, y, n) {
-      const cols = ["#2de8f0", "#3cde62", "#f2d234", "#ff9a2e", "#f0445d", "#c44bee", "#3b6cff"];
+      const cols = ["#3ba8b8", "#4daa58", "#d4b03a", "#e08a30", "#d24b4b", "#9a56b5", "#3d6bc4"];
       for (let i = 0; i < n; i++) {
         const a = rand(0, Math.PI * 2);
         const s = rand(80, 520);
@@ -380,7 +380,7 @@
         life: 0.9,
         max: 0.9,
         text: str,
-        color: color || "#fff",
+        color: color || "#2a3344",
         size: 16,
       });
     }
@@ -414,14 +414,13 @@
           ctx.save();
           ctx.globalAlpha = a;
           ctx.fillStyle = p.color;
-          ctx.font = "700 16px Orbitron, Rajdhani, sans-serif";
+          ctx.font = "800 16px Nunito, Trebuchet MS, sans-serif";
           ctx.textAlign = "center";
           ctx.fillText(p.text, p.x, p.y);
           ctx.restore();
           continue;
         }
         ctx.save();
-        ctx.globalCompositeOperation = "lighter";
         ctx.globalAlpha = a;
         ctx.fillStyle = p.color;
         ctx.strokeStyle = p.color;
@@ -454,29 +453,28 @@
     constructor(canvas) {
       this.canvas = canvas;
       this.ctx = canvas.getContext("2d");
-      this.stars = [];
+      this.clouds = [];
       this.floaters = [];
-      this.hue = 210;
       this.t = 0;
       this.resize();
-      for (let i = 0; i < 140; i++) {
-        this.stars.push({
+      for (let i = 0; i < 8; i++) {
+        this.clouds.push({
           x: Math.random(),
-          y: Math.random(),
-          s: rand(0.4, 1.8),
-          p: rand(0, Math.PI * 2),
+          y: rand(0.04, 0.42),
+          s: rand(60, 160),
+          vx: rand(0.008, 0.02),
         });
       }
       const types = E.TYPES;
-      for (let i = 0; i < 14; i++) {
+      for (let i = 0; i < 10; i++) {
         this.floaters.push({
           type: types[i % 7],
           x: rand(0, 1),
           y: rand(-0.2, 1),
           rot: rand(0, Math.PI * 2),
-          vr: rand(-0.6, 0.6),
-          vy: rand(0.02, 0.06),
-          scale: rand(12, 26),
+          vr: rand(-0.25, 0.25),
+          vy: rand(0.015, 0.04),
+          scale: rand(16, 28),
         });
       }
     }
@@ -490,16 +488,16 @@
       this.canvas.style.height = this.h + "px";
       this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     }
-    update(dt, playing, color) {
+    update(dt, playing) {
       this.t += dt;
-      if (color) {
-        const [r, g, b] = hexToRgb(color);
-        const target = (Math.atan2(Math.sqrt(3) * (g - b), 2 * r - g - b) * 180) / Math.PI;
-        this.hue = lerp(this.hue, (target + 360) % 360, 0.04);
+      for (let i = 0; i < this.clouds.length; i++) {
+        const c = this.clouds[i];
+        c.x += c.vx * dt * 0.08;
+        if (c.x > 1.2) c.x = -0.2;
       }
       for (let i = 0; i < this.floaters.length; i++) {
         const f = this.floaters[i];
-        f.y += f.vy * dt * (playing ? 0.25 : 1);
+        f.y += f.vy * dt * (playing ? 0.2 : 1);
         f.rot += f.vr * dt;
         if (f.y > 1.15) {
           f.y = -0.15;
@@ -507,40 +505,37 @@
         }
       }
     }
+    _cloud(ctx, x, y, s) {
+      ctx.fillStyle = "rgba(255,255,255,0.78)";
+      ctx.beginPath();
+      ctx.ellipse(x, y, s, s * 0.55, 0, 0, Math.PI * 2);
+      ctx.ellipse(x + s * 0.55, y + s * 0.08, s * 0.72, s * 0.48, 0, 0, Math.PI * 2);
+      ctx.ellipse(x - s * 0.5, y + s * 0.1, s * 0.6, s * 0.42, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
     draw(playing) {
       const ctx = this.ctx;
       const w = this.w;
       const h = this.h;
       const g = ctx.createLinearGradient(0, 0, 0, h);
-      g.addColorStop(0, "hsl(" + this.hue + ", 55%, 8%)");
-      g.addColorStop(0.5, "#07081a");
-      g.addColorStop(1, "#04040e");
+      g.addColorStop(0, playing ? "#8bb7d6" : "#7eb8de");
+      g.addColorStop(0.55, "#d5e6f2");
+      g.addColorStop(1, "#eef3f7");
       ctx.fillStyle = g;
       ctx.fillRect(0, 0, w, h);
 
-      const blobs = [
-        [w * 0.2, h * 0.25, w * 0.45, "hsla(" + this.hue + ",80%,50%,0.16)"],
-        [w * 0.8, h * 0.2, w * 0.4, "hsla(" + ((this.hue + 40) % 360) + ",90%,55%,0.12)"],
-        [w * 0.5, h * 0.85, w * 0.5, "hsla(" + ((this.hue + 300) % 360) + ",70%,45%,0.1)"],
-      ];
-      blobs.forEach((b, i) => {
-        const x = b[0] + Math.sin(this.t * 0.3 + i) * 40;
-        const y = b[1] + Math.cos(this.t * 0.2 + i) * 30;
-        const rad = ctx.createRadialGradient(x, y, 0, x, y, b[2]);
-        rad.addColorStop(0, b[3]);
-        rad.addColorStop(1, "transparent");
-        ctx.fillStyle = rad;
-        ctx.fillRect(0, 0, w, h);
-      });
+      ctx.fillStyle = "rgba(255,255,255,0.18)";
+      ctx.beginPath();
+      ctx.ellipse(w * 0.18, h * 0.9, w * 0.5, h * 0.18, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(w * 0.78, h * 0.94, w * 0.42, h * 0.16, 0, 0, Math.PI * 2);
+      ctx.fill();
 
-      for (let i = 0; i < this.stars.length; i++) {
-        const s = this.stars[i];
-        const tw = 0.4 + 0.6 * Math.abs(Math.sin(this.t * 1.6 + s.p));
-        ctx.globalAlpha = tw;
-        ctx.fillStyle = "#cfe6ff";
-        ctx.fillRect(s.x * w, s.y * h, s.s, s.s);
+      for (let i = 0; i < this.clouds.length; i++) {
+        const c = this.clouds[i];
+        this._cloud(ctx, c.x * w, c.y * h, c.s);
       }
-      ctx.globalAlpha = 1;
 
       if (!playing) {
         for (let i = 0; i < this.floaters.length; i++) {
@@ -549,12 +544,16 @@
           ctx.save();
           ctx.translate(f.x * w, f.y * h);
           ctx.rotate(f.rot);
-          ctx.globalAlpha = 0.18;
+          ctx.globalAlpha = 0.55;
           ctx.fillStyle = COLORS[f.type];
-          ctx.shadowColor = COLORS[f.type];
-          ctx.shadowBlur = 16;
+          ctx.strokeStyle = "rgba(0,0,0,0.2)";
+          ctx.lineWidth = 1;
           for (let k = 0; k < cells.length; k++) {
-            ctx.fillRect((cells[k][0] - 1.5) * f.scale, (cells[k][1] - 1.5) * f.scale, f.scale - 1, f.scale - 1);
+            const px = (cells[k][0] - 1.5) * f.scale;
+            const py = (cells[k][1] - 1.5) * f.scale;
+            roundRect(ctx, px, py, f.scale - 1.5, f.scale - 1.5, 3);
+            ctx.fill();
+            ctx.stroke();
           }
           ctx.restore();
         }
@@ -584,29 +583,48 @@
       }
     }
     _paint(ctx, s, color) {
-      const pad = s * 0.06;
-      const r = s * 0.18;
-      roundRect(ctx, pad, pad, s - pad * 2, s - pad * 2, r);
-      const g = ctx.createLinearGradient(0, 0, 0, s);
-      g.addColorStop(0, mix(color, 0.45, "#ffffff"));
-      g.addColorStop(0.4, color);
-      g.addColorStop(1, mix(color, 0.42, "#000000"));
-      ctx.fillStyle = g;
-      ctx.fill();
-      ctx.strokeStyle = mix(color, 0.25, "#000000");
-      ctx.lineWidth = Math.max(1, s * 0.05);
-      ctx.stroke();
-      ctx.fillStyle = "rgba(255,255,255,0.32)";
-      roundRect(ctx, pad + s * 0.1, pad + s * 0.08, s * 0.55, s * 0.22, r);
-      ctx.fill();
-      ctx.fillStyle = "rgba(255,255,255,0.7)";
+      const b = Math.max(2, s * 0.1);
+      ctx.fillStyle = mix(color, 0.45, "#000000");
+      ctx.fillRect(0, 0, s, s);
+      ctx.fillStyle = mix(color, 0.28, "#ffffff");
       ctx.beginPath();
-      ctx.arc(s * 0.28, s * 0.28, s * 0.06, 0, Math.PI * 2);
+      ctx.moveTo(0, 0);
+      ctx.lineTo(s, 0);
+      ctx.lineTo(s - b, b);
+      ctx.lineTo(b, b);
+      ctx.closePath();
       ctx.fill();
-      ctx.strokeStyle = "rgba(255,255,255,0.12)";
-      ctx.lineWidth = 1;
-      roundRect(ctx, pad + 2, pad + 2, s - pad * 2 - 4, s - pad * 2 - 4, r * 0.8);
-      ctx.stroke();
+      ctx.fillStyle = mix(color, 0.18, "#ffffff");
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(b, b);
+      ctx.lineTo(b, s - b);
+      ctx.lineTo(0, s);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = mix(color, 0.32, "#000000");
+      ctx.beginPath();
+      ctx.moveTo(s, 0);
+      ctx.lineTo(s, s);
+      ctx.lineTo(s - b, s - b);
+      ctx.lineTo(s - b, b);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = mix(color, 0.42, "#000000");
+      ctx.beginPath();
+      ctx.moveTo(0, s);
+      ctx.lineTo(s, s);
+      ctx.lineTo(s - b, s - b);
+      ctx.lineTo(b, s - b);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = color;
+      ctx.fillRect(b, b, s - b * 2, s - b * 2);
+      const inset = b + Math.max(2, s * 0.12);
+      ctx.fillStyle = mix(color, 0.16, "#ffffff");
+      ctx.fillRect(inset, inset, s - inset * 2, s - inset * 2);
+      ctx.fillStyle = "rgba(255,255,255,0.55)";
+      ctx.fillRect(inset + 1, inset + 1, Math.max(3, (s - inset * 2) * 0.38), Math.max(2, s * 0.08));
     }
     draw(ctx, type, x, y, size, alpha) {
       ctx.globalAlpha = alpha == null ? 1 : alpha;
@@ -905,8 +923,8 @@
           app.audio.tspin();
           app.shake = app.settings.shake ? 1.1 : 0;
           app.flash = 0.45;
-          app.flashColor = "#c44bee";
-          app.particles.swirl(sx(5), sy((ev.rows[0] != null ? ev.rows[0] : HIDDEN + 8)), "#c44bee");
+          app.flashColor = "#9a56b5";
+          app.particles.swirl(sx(5), sy((ev.rows[0] != null ? ev.rows[0] : HIDDEN + 8)), "#9a56b5");
         } else if (ev.lines > 0) app.audio.line(ev.lines);
         if (ev.cells && ev.cells.length) app.particles.shards(ev.cells, app.cell, HIDDEN, COLORS);
         for (let r = 0; r < ev.rows.length; r++) {
@@ -944,7 +962,7 @@
         app.audio.level();
         banner("LEVEL " + ev.level, "level");
         app.flash = 0.4;
-        app.flashColor = "#35e7f2";
+        app.flashColor = "#e08a30";
       }
       if (ev.type === "stackDrop") {
         app.dropMap = ev.dropFrom;
@@ -1065,9 +1083,8 @@
       $("stat-goal-wrap").style.display = "none";
       $("goal-fill").style.width = g.mode === "sprint" ? clamp((g.lines / 40) * 100, 0, 100) + "%" : "100%";
     }
-    const color = g.current ? COLORS[g.current.type] : "#35e7f2";
-    $("well-ring").style.boxShadow =
-      "inset 0 0 40px " + withAlpha(color, 0.12 + app.wellPulse * 0.25) + ", 0 0 " + (30 + app.wellPulse * 40) + "px " + withAlpha(color, 0.18);
+    const color = g.current ? COLORS[g.current.type] : "#3d6bc4";
+    $("well-ring").style.borderColor = color;
   }
 
   function drawPreviewStack(canvas, types, dim) {
@@ -1121,12 +1138,12 @@
     ctx.clearRect(0, 0, w, h);
 
     const bg = ctx.createLinearGradient(0, 0, 0, h);
-    bg.addColorStop(0, "#0b1024");
-    bg.addColorStop(1, "#070814");
+    bg.addColorStop(0, "#3a4254");
+    bg.addColorStop(1, "#2a3140");
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, w, h);
 
-    ctx.strokeStyle = "rgba(140,160,220,0.07)";
+    ctx.strokeStyle = "rgba(255,255,255,0.06)";
     ctx.lineWidth = 1;
     for (let x = 1; x < COLS; x++) {
       ctx.beginPath();
@@ -1150,10 +1167,8 @@
         const block = g.board[y][x];
         if (!block) continue;
         if (clearing[y]) {
-          ctx.globalCompositeOperation = "lighter";
-          ctx.fillStyle = withAlpha("#ffffff", 0.35 + clearPulse * 0.5);
+          ctx.fillStyle = withAlpha("#fff4c2", 0.45 + clearPulse * 0.4);
           ctx.fillRect(sx(x), sy(y), cell, cell);
-          ctx.globalCompositeOperation = "source-over";
           continue;
         }
         let dy = 0;
@@ -1225,18 +1240,11 @@
 
     if (g.state === "clearing") {
       ctx.save();
-      ctx.globalCompositeOperation = "lighter";
       const pulse = 0.35 + 0.65 * Math.abs(Math.sin((500 - g.clearTimer) * 0.02));
       for (let i = 0; i < g.clearingRows.length; i++) {
         const y = sy(g.clearingRows[i]);
-        const grad = ctx.createLinearGradient(0, y, w, y);
-        grad.addColorStop(0, "rgba(53,231,242,0)");
-        grad.addColorStop(0.5, "rgba(255,255,255," + (0.85 * pulse) + ")");
-        grad.addColorStop(1, "rgba(255,138,42,0)");
-        ctx.fillStyle = grad;
-        ctx.fillRect(0, y + cell * 0.32, w, cell * 0.36);
-        ctx.fillStyle = "rgba(255,255,255," + 0.12 * pulse + ")";
-        ctx.fillRect(0, y, w, cell);
+        ctx.fillStyle = "rgba(255, 236, 150," + 0.55 * pulse + ")";
+        ctx.fillRect(0, y + cell * 0.38, w, cell * 0.24);
       }
       ctx.restore();
     }
@@ -1287,8 +1295,9 @@
     ctx.rotate(angle);
     ctx.scale(scale, 2 - scale);
     ctx.translate(-sx(origin.x), -sy(origin.y));
-    ctx.shadowColor = COLORS[piece.type];
-    ctx.shadowBlur = 18;
+    ctx.shadowColor = "rgba(0,0,0,0.28)";
+    ctx.shadowBlur = 6;
+    ctx.shadowOffsetY = 3;
     for (let i = 0; i < cells.length; i++) {
       const c = cells[i];
       app.atlas.draw(ctx, piece.type, sx(c.x), sy(c.y), cell, 1);

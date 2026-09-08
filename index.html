@@ -3,21 +3,19 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-    <meta name="theme-color" content="#07081a" />
+    <meta name="theme-color" content="#4f8fc4" />
     <title>Tetra Friends</title>
     <link rel="icon" href="assets/favicon.svg" type="image/svg+xml" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@500;600;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@600;700;800&display=swap"
       rel="stylesheet"
     />
     <link rel="stylesheet" href="css/style.css" />
   </head>
   <body>
     <canvas id="sky"></canvas>
-    <div class="vignette"></div>
-    <div class="grain"></div>
 
     <div id="app">
       <section id="menu" class="screen">
@@ -31,25 +29,25 @@
             <span class="m j"></span>
             <span class="m l"></span>
           </div>
-          <h1><span>TETRA</span><span>FRIENDS</span></h1>
-          <p class="tagline">Guideline marathon. Neon soul. 2009-era rules.</p>
+          <h1><span>Tetra</span><span>Friends</span></h1>
+          <p class="tagline">Same rules as the old site. Marathon, sprint, and ultra.</p>
         </div>
 
         <div class="mode-grid">
           <button class="mode-card" data-mode="marathon">
-            <em>01</em>
-            <strong>Marathon</strong>
-            <span>15 variable-goal levels. Stack, spin, survive.</span>
+            <em>Marathon</em>
+            <strong>15 levels</strong>
+            <span>Clear each goal to rank up. Variable-goal, level cap 15.</span>
           </button>
           <button class="mode-card" data-mode="sprint">
-            <em>02</em>
-            <strong>Sprint</strong>
-            <span>40 lines. Race the clock like the old Solo courts.</span>
+            <em>Sprint</em>
+            <strong>40 lines</strong>
+            <span>Race the clock. Fastest time on 40 lines wins.</span>
           </button>
           <button class="mode-card" data-mode="ultra">
-            <em>03</em>
-            <strong>Ultra</strong>
-            <span>Two minutes. Score like it is still Friday night on the site.</span>
+            <em>Ultra</em>
+            <strong>2 minutes</strong>
+            <span>Score attack. Stack, spin, and cash in before the buzzer.</span>
           </button>
         </div>
 
@@ -58,13 +56,13 @@
           <button class="ghost-btn" id="btn-scores">Records</button>
           <button class="ghost-btn" id="btn-settings">Settings</button>
         </div>
-        <p class="hint">Press Enter for Marathon · Z / X rotate · C hold · Space slam</p>
+        <p class="hint">Enter starts Marathon · Z / X rotate · C hold · Space hard drop</p>
       </section>
 
       <section id="play" class="screen hidden">
         <aside class="hud-col left">
           <div class="panel">
-            <span class="panel-label">HOLD</span>
+            <span class="panel-label">Hold</span>
             <canvas id="hold" width="160" height="120"></canvas>
           </div>
           <div class="panel stats-panel">
@@ -89,7 +87,7 @@
 
         <aside class="hud-col right">
           <div class="panel">
-            <span class="panel-label">NEXT</span>
+            <span class="panel-label">Next</span>
             <canvas id="next" width="160" height="420"></canvas>
           </div>
         </aside>

@@ -102,14 +102,14 @@
   };
 
   const COLORS = {
-    I: "#2DE8F0",
-    O: "#F2D234",
-    T: "#C44BEE",
-    S: "#3CDE62",
-    Z: "#F0445D",
-    J: "#3B6CFF",
-    L: "#FF9A2E",
-    G: "#5A6478",
+    I: "#3BA8B8",
+    O: "#D4B03A",
+    T: "#9A56B5",
+    S: "#4DAA58",
+    Z: "#D24B4B",
+    J: "#3D6BC4",
+    L: "#E08A30",
+    G: "#7A8494",
   };
 
   const LOCK_DELAY = 500;

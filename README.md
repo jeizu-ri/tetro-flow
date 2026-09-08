@@ -1,8 +1,8 @@
 # Tetra Friends
 
-A neon, single-player Tetris built around the **old Tetris Friends website rules** — Super Rotation System, 7-bag randomizer, hold, five next pieces, ghost piece, hard drop, move-reset lock delay, 3-corner T-spins (with Mini), combos, back-to-back, and variable-goal Marathon.
+A single-player Tetris built around the **old Tetris Friends website rules**. Bright toy-plastic look, not a neon overlay.
 
-The board slams, pieces corkscrew when they rotate, line clears detonate, and T-spins throw a purple vortex. It is meant to feel like Friday night on the old site, with the volume knob twisted up.
+The board slams, pieces spin, and line clears pop — same juice, daylight clothes.
 
 ## Play
 
