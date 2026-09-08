@@ -1134,7 +1134,9 @@
     return h;
   }
 
-  function evaluateBoard(board) {
+  function evaluateBoard(board, skill) {
+    const holeW = skill && skill.holeW != null ? skill.holeW : 85;
+    const bumpW = skill && skill.bumpW != null ? skill.bumpW : 3.4;
     const heights = boardHeights(board);
     let holes = 0;
     let agg = 0;
@@ -1148,10 +1150,27 @@
       }
     }
     for (let x = 0; x < COLS - 1; x++) bump += Math.abs(heights[x] - heights[x + 1]);
-    return -holes * 85 - agg * 2.2 - bump * 3.4;
+    let well = 0;
+    if (skill && skill.tetris >= 200) {
+      let minH = 99;
+      let wellCol = 9;
+      for (let x = 0; x < COLS; x++) {
+        if (heights[x] < minH) {
+          minH = heights[x];
+          wellCol = x;
+        }
+      }
+      if (wellCol === 9 || wellCol === 0) {
+        let others = 0;
+        for (let x = 0; x < COLS; x++) if (x !== wellCol) others += heights[x];
+        others /= COLS - 1;
+        if (others - minH >= 3) well = 22;
+      }
+    }
+    return -holes * holeW - agg * 2.2 - bump * bumpW + well;
   }
 
-  function simulatePlace(board, piece) {
+  function simulatePlace(board, piece, skill) {
     const next = copyBoard(board);
     const cs = cellsOf(piece);
     for (let i = 0; i < cs.length; i++) {
@@ -1178,24 +1197,74 @@
       out[write] = kept[i];
       write -= 1;
     }
-    let score = evaluateBoard(out) + cleared * 48;
-    if (cleared === 4) score += 220;
+    const clearW = skill && skill.clearW != null ? skill.clearW : 48;
+    const tetris = skill && skill.tetris != null ? skill.tetris : 220;
+    let score = evaluateBoard(out, skill) + cleared * clearW;
+    if (cleared === 4) score += tetris;
     if (cleared === 3) score += 40;
     if (cleared === 2) score += 12;
     return { score: score, lines: cleared, board: out };
   }
 
+  const BOT_SKILLS = {
+    easy: {
+      think: [640, 200],
+      action: 210,
+      drop: 300,
+      noise: 70,
+      holdMargin: 9999,
+      lookAhead: false,
+      mistake: 0.28,
+      holeW: 32,
+      bumpW: 1.8,
+      tetris: 40,
+      clearW: 18,
+    },
+    medium: {
+      think: [220, 90],
+      action: 92,
+      drop: 120,
+      noise: 8,
+      holdMargin: 24,
+      lookAhead: false,
+      mistake: 0.04,
+      holeW: 92,
+      bumpW: 3.6,
+      tetris: 280,
+      clearW: 58,
+    },
+    hard: {
+      think: [55, 35],
+      action: 36,
+      drop: 36,
+      noise: 0,
+      holdMargin: 8,
+      lookAhead: true,
+      mistake: 0,
+      holeW: 125,
+      bumpW: 4.4,
+      tetris: 560,
+      clearW: 90,
+    },
+  };
+
   class TetrisBot {
-    constructor(game) {
+    constructor(game, skill) {
       this.game = game;
       this.plan = null;
       this.timer = 0;
-      this.actionMs = 160;
-      this.thinkMs = 420;
-      this.dropWait = 220;
+      this.actionMs = 92;
+      this.thinkMs = 220;
+      this.dropWait = 120;
       this.phase = "think";
       this.tries = 0;
       this.pieceId = -1;
+      this.setSkill(skill);
+    }
+
+    setSkill(name) {
+      this.skillName = BOT_SKILLS[name] ? name : "medium";
+      this.skill = BOT_SKILLS[this.skillName];
     }
 
     reset() {
@@ -1208,32 +1277,48 @@
 
     _pace() {
       const lv = this.game.level || 1;
+      const s = this.skill;
+      const thinkCut = this.skillName === "hard" ? 4 : 12;
       return {
-        think: Math.max(200, 460 - lv * 16) + Math.random() * 120,
-        action: Math.max(95, 175 - lv * 5),
-        drop: Math.max(90, 240 - lv * 8),
+        think: Math.max(40, s.think[0] - lv * thinkCut) + Math.random() * s.think[1],
+        action: Math.max(28, s.action - lv * (this.skillName === "hard" ? 1 : 3)),
+        drop: Math.max(24, s.drop - lv * (this.skillName === "hard" ? 1 : 4)),
       };
     }
 
-    _search(type, board) {
-      let best = null;
-      let bestScore = -Infinity;
+    _candidates(type, board, lookAhead) {
+      const skill = this.skill;
       const spawnY = SPAWN[type].y;
       const threat = this.game.pendingGarbage || 0;
+      const nextType = lookAhead && this.game.queue && this.game.queue[0];
+      const list = [];
       for (let rot = 0; rot < 4; rot++) {
         for (let x = -2; x <= 8; x++) {
           const p = { type: type, x: x, y: spawnY, rot: rot };
           if (collides(board, p)) continue;
           while (!collides(board, { type: p.type, x: p.x, y: p.y + 1, rot: p.rot })) p.y += 1;
-          const sim = simulatePlace(board, p);
+          const sim = simulatePlace(board, p, skill);
           let score = sim.score;
-          if (threat > 0 && sim.lines > 0) score += sim.lines * 90 + (sim.lines >= 2 ? 50 : 0);
-          if (score > bestScore) {
-            bestScore = score;
-            best = { rot: rot, x: x, y: p.y, score: score, hold: false };
+          if (threat > 0 && sim.lines > 0) score += sim.lines * 110 + (sim.lines >= 2 ? 60 : 0);
+          if (lookAhead && nextType) {
+            const follow = this._bestOn(nextType, sim.board, false);
+            if (follow) score += follow.score * 0.42;
           }
+          if (skill.noise) score += (Math.random() - 0.5) * 2 * skill.noise;
+          list.push({ rot: rot, x: x, y: p.y, score: score, hold: false, lines: sim.lines });
         }
       }
+      return list;
+    }
+
+    _bestOn(type, board, lookAhead) {
+      const list = this._candidates(type, board, lookAhead);
+      if (!list.length) return null;
+      if (this.skill.mistake && Math.random() < this.skill.mistake) {
+        return list[Math.floor(Math.random() * list.length)];
+      }
+      let best = list[0];
+      for (let i = 1; i < list.length; i++) if (list[i].score > best.score) best = list[i];
       return best;
     }
 
@@ -1241,12 +1326,12 @@
       const g = this.game;
       const piece = g.current;
       if (!piece) return null;
-      const now = this._search(piece.type, g.board);
+      const now = this._bestOn(piece.type, g.board, this.skill.lookAhead);
       if (!g.holdUsed) {
         const alt = g.hold || g.queue[0];
         if (alt && alt !== piece.type) {
-          const other = this._search(alt, g.board);
-          if (other && (!now || other.score > now.score + 40)) {
+          const other = this._bestOn(alt, g.board, false);
+          if (other && (!now || other.score > now.score + this.skill.holdMargin)) {
             return { hold: true, score: other.score };
           }
         }
@@ -1318,10 +1403,11 @@
   }
 
   class BattleMatch {
-    constructor() {
+    constructor(skill) {
+      this.skill = BOT_SKILLS[skill] ? skill : "medium";
       this.you = new Game();
       this.bot = new Game();
-      this.ai = new TetrisBot(this.bot);
+      this.ai = new TetrisBot(this.bot, this.skill);
       this.kosYou = 0;
       this.kosBot = 0;
       this.targetKos = 3;
@@ -1334,6 +1420,7 @@
     start() {
       this.you.start("battle");
       this.bot.start("battle");
+      this.ai.setSkill(this.skill);
       this.ai.reset();
       this.kosYou = 0;
       this.kosBot = 0;
@@ -1429,6 +1516,7 @@
     Game: Game,
     TetrisBot: TetrisBot,
     BattleMatch: BattleMatch,
+    BOT_SKILLS: BOT_SKILLS,
     occupied: occupied,
     kicksFor: kicksFor,
   };

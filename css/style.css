@@ -129,10 +129,7 @@ body {
 .mode-grid {
   display: grid;
   gap: 14px;
-}
-
-.mode-grid.single {
-  grid-template-columns: minmax(220px, 320px);
+  grid-template-columns: repeat(3, minmax(160px, 230px));
   justify-content: center;
 }
 
@@ -242,7 +239,7 @@ body {
 
 .mode-card strong {
   display: block;
-  font-size: 26px;
+  font-size: 22px;
   margin: 4px 0 8px;
   font-family: var(--font-display);
   color: #2f5f8f;

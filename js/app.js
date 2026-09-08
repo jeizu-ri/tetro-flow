@@ -73,6 +73,7 @@
       sfx: 80,
       shake: true,
       ghost: true,
+      skill: "medium",
     };
     try {
       return Object.assign(base, JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}"));
@@ -788,8 +789,14 @@
     return bits.join(" ");
   }
 
-  function startMode(mode) {
+  const SKILL_LABELS = { easy: "Easy", medium: "Medium", hard: "Hard" };
+
+  function startMode(mode, skill) {
     app.mode = "battle";
+    app.skill = skill && E.BOT_SKILLS[skill] ? skill : app.settings.skill || "medium";
+    if (!E.BOT_SKILLS[app.skill]) app.skill = "medium";
+    app.settings.skill = app.skill;
+    saveSettings(app.settings);
     app.audio.unlock();
     app.audio.started = true;
     app.audio.nextNote = (app.audio.ctx && app.audio.ctx.currentTime + 0.05) || 0;
@@ -798,9 +805,10 @@
     showScreen("play");
     closeModal();
     layout();
-    app.battle = new E.BattleMatch();
+    app.battle = new E.BattleMatch(app.skill);
     app.game = app.battle.you;
     app.game.setDasArr(app.settings.das, app.settings.arr);
+    if ($("bot-name")) $("bot-name").textContent = "Rival · " + (SKILL_LABELS[app.skill] || "Medium");
     app.running = true;
     app.frozen = true;
     app.matchEnded = false;
@@ -1040,6 +1048,7 @@
     const scores = loadScores();
     if (!scores.battle) scores.battle = [];
     scores.battle.unshift({
+      skill: app.skill || "medium",
       win: win,
       kos: b ? b.kosYou : 0,
       kosAgainst: b ? b.kosBot : 0,
@@ -1095,7 +1104,7 @@
     $("scoreboard").innerHTML =
       "<h3>Battle 2P</h3>" +
       list(battle, function (r) {
-        return (r.win ? "WIN" : "LOSS") + " · KO " + (r.kos || 0) + "–" + (r.kosAgainst || 0) + " · sent " + (r.sent || 0);
+        return (r.win ? "WIN" : "LOSS") + " · " + (r.skill || "medium") + " · KO " + (r.kos || 0) + "–" + (r.kosAgainst || 0) + " · sent " + (r.sent || 0);
       });
   }
 
@@ -1434,7 +1443,7 @@
 
     document.querySelectorAll(".mode-card").forEach(function (btn) {
       btn.addEventListener("click", function () {
-        startMode(btn.getAttribute("data-mode"));
+        startMode(btn.getAttribute("data-mode"), btn.getAttribute("data-skill"));
       });
     });
     $("btn-how").onclick = function () {
@@ -1458,7 +1467,7 @@
     $("btn-menu").onclick = quitToMenu;
     $("btn-retry").onclick = function () {
       closeModal();
-      startMode(app.mode);
+      startMode("battle", app.skill || app.settings.skill);
     };
 
     ["set-das", "set-arr", "set-music", "set-sfx"].forEach(function (id) {
@@ -1484,7 +1493,7 @@
     window.addEventListener("keydown", function (e) {
       app.audio.unlock();
       if (e.code === "Enter" && !$("menu").classList.contains("hidden")) {
-        startMode("battle");
+        startMode("battle", app.settings.skill || "medium");
         return;
       }
       if (e.code === "KeyM") {
@@ -1543,7 +1552,7 @@
 
     applySettings();
     const bootMode = new URLSearchParams(location.search).get("mode");
-    if (bootMode === "battle") startMode("battle");
+    if (bootMode === "battle") startMode("battle", app.settings.skill || "medium");
     requestAnimationFrame(tick);
   }
 

@@ -30,14 +30,24 @@
             <span class="m l"></span>
           </div>
           <h1><span>Tetra</span><span>Friends</span></h1>
-          <p class="tagline">Battle 2P. You vs a bot. First to 3 KOs, or the 2:00 buzzer.</p>
+          <p class="tagline">Battle 2P. Easy, Medium, or Hard. First to 3 KOs, or the 2:00 buzzer.</p>
         </div>
 
-        <div class="mode-grid single">
-          <button class="mode-card" data-mode="battle">
+        <div class="mode-grid">
+          <button class="mode-card" data-mode="battle" data-skill="easy">
             <em>Battle 2P</em>
-            <strong>vs Bot</strong>
-            <span>Send garbage, steal KOs. First to 3 knockouts wins the set.</span>
+            <strong>Easy</strong>
+            <span>Slow and sloppy. Learn T-spins without getting dumped on.</span>
+          </button>
+          <button class="mode-card" data-mode="battle" data-skill="medium">
+            <em>Battle 2P</em>
+            <strong>Medium</strong>
+            <span>A fair fight. Stacks, holds, and sends garbage.</span>
+          </button>
+          <button class="mode-card" data-mode="battle" data-skill="hard">
+            <em>Battle 2P</em>
+            <strong>Hard</strong>
+            <span>Fast, looks ahead, hunts Tetrises. Bring your T-Spin Doubles.</span>
           </button>
         </div>
 
@@ -46,7 +56,7 @@
           <button class="ghost-btn" id="btn-scores">Records</button>
           <button class="ghost-btn" id="btn-settings">Settings</button>
         </div>
-        <p class="hint">Enter starts the fight · Z / X rotate · C hold · Space hard drop</p>
+        <p class="hint">Pick a difficulty · Enter rematches the last one · Z / X rotate · C hold · Space hard drop</p>
       </section>
 
       <section id="play" class="screen hidden">
@@ -92,7 +102,7 @@
               <span id="ko-bot">○ ○ ○</span>
             </div>
             <div class="vs-label">VS</div>
-            <div class="bot-name">Rival Bot</div>
+            <div class="bot-name" id="bot-name">Rival Bot</div>
           </div>
 
           <div class="stage bot">
@@ -122,12 +132,11 @@
       <div class="modal" id="modal-how">
         <h2>How to play</h2>
         <p>
-          Battle 2P, Tetris Friends style: Hold on the left of your well, Next on the right of
-          your well, 10×20 boards. SRS rotations, guideline scoring (T-Spin Double is 1200 × level,
-          back-to-back ×1.5). Level up every 10 lines — gravity and points both climb. Line clears
-          send garbage (doubles, triples, Tetrises, T-spins, back-to-back, combos). Incoming garbage
-          can be cancelled by attacking. First to <strong>3 KOs</strong> wins. If 2:00 runs out,
-          KOs, then garbage sent, then stack height decide it.
+          Pick Easy, Medium, or Hard. Hold is on the left of your well, Next on the right of
+          your well. 10×20 boards, SRS rotations, guideline scoring (T-Spin Double is 1200 × level,
+          back-to-back ×1.5). Level up every 10 lines. Line clears send garbage. First to
+          <strong>3 KOs</strong> wins. If 2:00 runs out, KOs, then garbage sent, then stack height
+          decide it.
         </p>
         <ul class="keys">
           <li><kbd>←</kbd><kbd>→</kbd> Move</li>

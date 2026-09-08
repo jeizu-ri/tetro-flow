@@ -210,12 +210,19 @@ test("holding left auto-shifts after DAS then ARR", () => {
   assert.ok(g.current.x <= 1);
 });
 
-test("battle bot locks pieces and can send garbage", () => {
-  const match = new E.BattleMatch();
-  match.start();
-  for (let i = 0; i < 120; i++) match.update(40);
-  assert.ok(match.bot.stats.pieces >= 2);
-  assert.ok(match.you.stats.pieces >= 1);
+test("hard bot plays faster than easy", () => {
+  const easy = new E.BattleMatch("easy");
+  const hard = new E.BattleMatch("hard");
+  easy.start();
+  hard.start();
+  for (let i = 0; i < 90; i++) {
+    easy.update(40);
+    hard.update(40);
+  }
+  assert.ok(hard.bot.stats.pieces > easy.bot.stats.pieces);
+  assert.strictEqual(easy.skill, "easy");
+  assert.strictEqual(hard.skill, "hard");
+  assert.strictEqual(hard.ai.skillName, "hard");
 });
 
 test("line clears resolve immediately with no freeze", () => {
