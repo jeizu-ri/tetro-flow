@@ -232,6 +232,46 @@ test("hard bot plays faster than easy", () => {
   assert.strictEqual(hard.ai.skillName, "hard");
 });
 
+test("hard bot takes a ready tetris with I", () => {
+  const m = new E.BattleMatch("hard");
+  m.start();
+  m.bot.board = E.emptyBoard();
+  for (let y = 36; y < 40; y++) {
+    for (let x = 0; x < 9; x++) m.bot.board[y][x] = { type: "Z" };
+  }
+  m.bot.current = { type: "I", x: 3, y: 18, rot: 0 };
+  m.bot.holdUsed = true;
+  m.ai.reset();
+  m.ai.timer = 999;
+  m.ai.pieceId = -1;
+  for (let i = 0; i < 25; i++) m.update(50);
+  assert.strictEqual(m.bot.lines, 4, "hard lines " + m.bot.lines);
+  assert.ok(m.bot.stats.tetrises >= 1);
+});
+
+test("medium bot prefers a T-spin double over a single", () => {
+  const m = new E.BattleMatch("medium");
+  m.start();
+  m.bot.board = E.emptyBoard();
+  for (let y = 37; y <= 38; y++) {
+    for (let x = 0; x < 10; x++) {
+      if (y === 37 && (x === 4 || x === 5 || x === 6)) continue;
+      if (y === 38 && x === 5) continue;
+      m.bot.board[y][x] = { type: "Z" };
+    }
+  }
+  m.bot.board[36][4] = { type: "Z" };
+  m.bot.board[36][6] = { type: "Z" };
+  m.bot.current = { type: "T", x: 3, y: 18, rot: 0 };
+  m.bot.holdUsed = true;
+  m.ai.reset();
+  m.ai.timer = 999;
+  m.ai.pieceId = -1;
+  const plan = m.ai._best();
+  assert.ok(plan, "no plan");
+  assert.ok(plan.tspin, "expected a T-spin plan, got lines=" + (plan && plan.lines));
+});
+
 test("bots keep placing after they score a line", () => {
   ["easy", "medium", "hard"].forEach(function (skill) {
     const m = new E.BattleMatch(skill);
@@ -243,6 +283,7 @@ test("bots keep placing after they score a line", () => {
       }
     }
     m.bot.current = { type: "I", x: 3, y: 18, rot: 0 };
+    m.bot.holdUsed = true;
     m.ai.skill.noise = 0;
     m.ai.skill.mistake = 0;
     m.ai.reset();
@@ -250,16 +291,19 @@ test("bots keep placing after they score a line", () => {
     m.ai.pieceId = -1;
     let piecesBeforeClear = 0;
     let sawClear = false;
-    for (let i = 0; i < 40; i++) {
+    let burst = 0;
+    for (let i = 0; i < 80; i++) {
       const lines0 = m.bot.lines;
       const pieces0 = m.bot.stats.pieces;
       m.update(40);
       if (!sawClear && m.bot.lines > lines0) {
         sawClear = true;
         piecesBeforeClear = pieces0;
+        burst = m.bot.stats.pieces - pieces0;
       }
     }
     assert.ok(sawClear, skill + " never cleared");
+    assert.ok(burst <= 2, skill + " dumped " + burst + " pieces on the clearing frame");
     assert.ok(
       m.bot.stats.pieces >= piecesBeforeClear + 2,
       skill + " stalled after a line: " + m.bot.stats.pieces + " after starting from " + piecesBeforeClear
