@@ -4,6 +4,8 @@ A Tetris Friends–style **Battle 2P** game: you vs a bot on two boards. Bright 
 
 Pick **Easy**, **Medium**, or **Hard** on the menu. Hold sits on the **left of your well**, Next on the **right of your well**.
 
+**Live app:** [tetro-flow-jeizu-projects.vercel.app](https://tetro-flow-jeizu-projects.vercel.app)
+
 ## Play
 
 Open `index.html` in a browser, or serve the folder:
