@@ -210,26 +210,28 @@ test("holding left auto-shifts after DAS then ARR", () => {
   assert.ok(g.current.x <= 1);
 });
 
-test("hard bot snaps many pieces quickly", () => {
+test("hard bot keeps placing pieces", () => {
   const m = new E.BattleMatch("hard");
   m.start();
-  for (let i = 0; i < 50; i++) m.update(40);
-  assert.ok(m.bot.stats.pieces >= 8, "hard bot pieces " + m.bot.stats.pieces);
+  for (let i = 0; i < 80; i++) m.update(40);
+  assert.ok(m.bot.stats.pieces >= 5, "hard bot pieces " + m.bot.stats.pieces);
 });
 
-test("hard bot plays faster than easy", () => {
-  const easy = new E.BattleMatch("easy");
+test("medium and hard play at a similar pace", () => {
+  const med = new E.BattleMatch("medium");
   const hard = new E.BattleMatch("hard");
-  easy.start();
+  med.start();
   hard.start();
   for (let i = 0; i < 90; i++) {
-    easy.update(40);
+    med.update(40);
     hard.update(40);
   }
-  assert.ok(hard.bot.stats.pieces > easy.bot.stats.pieces);
-  assert.strictEqual(easy.skill, "easy");
+  const mp = med.bot.stats.pieces;
+  const hp = hard.bot.stats.pieces;
+  const ratio = hp / Math.max(1, mp);
+  assert.ok(ratio > 0.65 && ratio < 1.55, "pace ratio " + ratio + " med=" + mp + " hard=" + hp);
+  assert.strictEqual(med.skill, "medium");
   assert.strictEqual(hard.skill, "hard");
-  assert.strictEqual(hard.ai.skillName, "hard");
 });
 
 test("hard bot takes a ready tetris with I", () => {
@@ -244,32 +246,32 @@ test("hard bot takes a ready tetris with I", () => {
   m.ai.reset();
   m.ai.timer = 999;
   m.ai.pieceId = -1;
-  for (let i = 0; i < 25; i++) m.update(50);
+  for (let i = 0; i < 40; i++) m.update(50);
   assert.strictEqual(m.bot.lines, 4, "hard lines " + m.bot.lines);
   assert.ok(m.bot.stats.tetrises >= 1);
 });
 
-test("medium bot prefers a T-spin double over a single", () => {
-  const m = new E.BattleMatch("medium");
+test("hard bot does not fill a ready tetris well with J", () => {
+  const m = new E.BattleMatch("hard");
   m.start();
   m.bot.board = E.emptyBoard();
-  for (let y = 37; y <= 38; y++) {
-    for (let x = 0; x < 10; x++) {
-      if (y === 37 && (x === 4 || x === 5 || x === 6)) continue;
-      if (y === 38 && x === 5) continue;
-      m.bot.board[y][x] = { type: "Z" };
-    }
+  for (let y = 36; y < 40; y++) {
+    for (let x = 0; x < 9; x++) m.bot.board[y][x] = { type: "Z" };
   }
-  m.bot.board[36][4] = { type: "Z" };
-  m.bot.board[36][6] = { type: "Z" };
-  m.bot.current = { type: "T", x: 3, y: 18, rot: 0 };
+  m.bot.current = { type: "J", x: 3, y: 18, rot: 0 };
   m.bot.holdUsed = true;
   m.ai.reset();
   m.ai.timer = 999;
   m.ai.pieceId = -1;
   const plan = m.ai._best();
-  assert.ok(plan, "no plan");
-  assert.ok(plan.tspin, "expected a T-spin plan, got lines=" + (plan && plan.lines));
+  assert.ok(plan && !plan.hold, "expected a placement");
+  const cells = E.cellsOf({ type: "J", x: plan.x, y: plan.y, rot: plan.rot });
+  assert.ok(
+    cells.every(function (c) {
+      return c.x !== 9;
+    }),
+    "J covered the well at x=" + plan.x + " rot=" + plan.rot
+  );
 });
 
 test("bots keep placing after they score a line", () => {

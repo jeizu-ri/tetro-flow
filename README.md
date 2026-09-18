@@ -26,7 +26,7 @@ You and **Rival Bot** play at the same time.
 - Incoming garbage is cancelled by your own attacks
 - Topping out is a KO: the board resets and the set keeps going
 - Line clears are instant (no freeze frame)
-- Bots play at a human pace. Higher difficulties stack a right well, hold I for Tetrises, and take T-spins when they are there
+- Bots play at a human pace. Medium and Hard are smarter stackers (right well, no holes, Tetris with I), not faster players
 
 ## Guideline feel
 
