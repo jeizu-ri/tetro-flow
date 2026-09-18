@@ -97,21 +97,10 @@ body {
 .logo h1 {
   font-family: var(--font-display);
   font-weight: 700;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.04em;
   line-height: 0.9;
   font-size: clamp(48px, 10vw, 92px);
-}
-
-.logo h1 span {
-  display: block;
-}
-
-.logo h1 span:first-child {
   color: #2f5f8f;
-}
-
-.logo h1 span:last-child {
-  color: var(--orange);
 }
 
 .tagline {

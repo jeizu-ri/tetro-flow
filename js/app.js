@@ -5,8 +5,8 @@
   const COLS = E.COLS;
   const VISIBLE = E.VISIBLE;
 
-  const SETTINGS_KEY = "tetra-friends-settings-v1";
-  const SCORES_KEY = "tetra-friends-scores-v1";
+  const SETTINGS_KEY = "testris-settings-v1";
+  const SCORES_KEY = "testris-scores-v1";
 
   function clamp(v, a, b) {
     return Math.max(a, Math.min(b, v));

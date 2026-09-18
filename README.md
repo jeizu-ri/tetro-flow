@@ -1,4 +1,4 @@
-# Tetra Friends
+# Testris
 
 A Tetris Friends–style **Battle 2P** game: you vs a bot on two boards. Bright toy-plastic look, not a neon overlay.
 

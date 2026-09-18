@@ -1,5 +1,5 @@
 /**
- * Tetra Friends — Tetris Friends–style guideline engine.
+ * Testris — Tetris Friends–style guideline engine.
  * SRS kicks, 7-bag, hold, 5 previews, move-reset lock, variable-goal marathon.
  */
 (function (root) {
@@ -1303,6 +1303,9 @@
       this.tries = 0;
       this.pieceId = -1;
       this._justCleared = false;
+      this._rush = 0;
+      this._cool = 0;
+      this._idle = 0;
       this.setSkill(skill);
     }
 
@@ -1318,6 +1321,9 @@
       this.tries = 0;
       this.pieceId = -1;
       this._justCleared = false;
+      this._rush = 0;
+      this._cool = 0;
+      this._idle = 0;
     }
 
     _pace() {
@@ -1383,13 +1389,14 @@
       const g = this.game;
       const piece = g.current;
       if (!piece) return null;
-      const next = this.skill.lookAhead && !this._justCleared ? g.queue[0] : null;
+      const comboing = this._justCleared || this._rush > 0 || this._cool > 0 || g.combo >= 0;
+      const next = this.skill.lookAhead && !comboing ? g.queue[0] : null;
       let now = this._bestOn(piece.type, g.board, next);
       if (this.skill.mistake && now && Math.random() < this.skill.mistake) {
         const all = this._candidates(piece.type, g.board, null);
         if (all.length) now = all[Math.floor(Math.random() * all.length)];
       }
-      if (!g.holdUsed) {
+      if (!g.holdUsed && !comboing) {
         const alt = g.hold || g.queue[0];
         if (alt && alt !== piece.type) {
           const altNext = this.skill.lookAhead ? (g.hold ? g.queue[0] : g.queue[1]) : null;
@@ -1430,80 +1437,95 @@
       }
     }
 
+    _commit() {
+      const g = this.game;
+      const from = g.events.length;
+      const wasHold = this.plan && this.plan.hold;
+      if (!this.plan) g.hardDrop();
+      else this._snap(this.plan);
+      this.plan = null;
+      this.phase = "think";
+      this.pieceId = -1;
+      this.timer = 0;
+      this.tries = 0;
+      this._idle = 0;
+      if (wasHold) {
+        this._justCleared = this._justCleared || false;
+        return g.current && g.state === "playing" ? "again" : "wait";
+      }
+      this._noteClear(g, from);
+      if (this._justCleared) {
+        this._rush = 2;
+        this._cool = 480;
+      } else if (this._rush > 0) this._rush -= 1;
+      if ((this._justCleared || this._rush > 0) && g.current && g.state === "playing") return "again";
+      return "wait";
+    }
+
+    _shouldSnap() {
+      if (this.skill.snap || this._justCleared || this._rush > 0 || this._cool > 0) return true;
+      if (this.plan && this.plan.lines > 0) return true;
+      return false;
+    }
+
+    _replan(g) {
+      this.pieceId = g.pieceCount;
+      this.plan = null;
+      this.phase = "think";
+      this.tries = 0;
+      const pace = this._pace();
+      this.actionMs = pace.action;
+      this.dropWait = pace.drop;
+      if (this._justCleared || this._rush > 0 || this._cool > 0) {
+        this.thinkMs = 0;
+        this.timer = 0;
+      } else {
+        this.thinkMs = pace.think;
+        this.timer = 0;
+      }
+    }
+
     _playOne() {
       const g = this.game;
-      if (this.pieceId !== g.pieceCount) {
-        this.pieceId = g.pieceCount;
-        this.plan = null;
-        this.phase = "think";
-        this.tries = 0;
-        const pace = this._pace();
-        this.thinkMs = this._justCleared ? (this.skill.snap ? 0 : Math.min(40, pace.think)) : pace.think;
-        this.actionMs = pace.action;
-        this.dropWait = pace.drop;
-        if (!this._justCleared) this.timer = 0;
-        else this.timer = this.thinkMs;
+      if (!g.current || g.state !== "playing") return "wait";
+      if (this.pieceId !== g.pieceCount || (!this.plan && this.phase !== "think")) {
+        this._replan(g);
       }
       if (this.phase === "think") {
         if (this.timer < this.thinkMs) return "wait";
         this.plan = this._best();
         this.timer = 0;
         this.phase = "move";
-        if (!this.plan) {
-          const from = g.events.length;
-          g.hardDrop();
-          this._noteClear(g, from);
-          return this._justCleared ? "combo" : "done";
-        }
-        if (this.skill.snap) {
-          const from = g.events.length;
-          const wasHold = this.plan.hold;
-          this._snap(this.plan);
-          this.plan = null;
-          if (wasHold) {
-            this.pieceId = -1;
-            this.phase = "think";
-            this.timer = this.thinkMs;
-            return "combo";
-          }
-          this._noteClear(g, from);
-          return this._justCleared ? "combo" : "done";
-        }
+        if (!this.plan || this._shouldSnap()) return this._commit();
       }
-      if (!this.plan) return "done";
+      if (!this.plan) return this._commit();
       if (this.plan.hold) {
         if (this.timer < this.actionMs) return "wait";
-        g.holdPiece();
-        this.plan = null;
-        this.pieceId = -1;
-        return "combo";
+        return this._commit();
       }
       if (this.phase === "drop") {
-        if (this.timer < this.dropWait) return "wait";
-        const from = g.events.length;
-        g.hardDrop();
-        this.plan = null;
-        this._noteClear(g, from);
-        return this._justCleared ? "combo" : "done";
+        if (this.timer < this.dropWait && !(this.plan.lines > 0)) return "wait";
+        return this._commit();
       }
       if (this.timer < this.actionMs) return "wait";
       this.timer = 0;
       this.tries += 1;
       const p = g.current;
-      if (!p) return "done";
+      if (!p) return "wait";
       if (p.rot !== this.plan.rot) {
         if (!g.rotate(1)) g.rotate(-1);
-        if (this.tries > 12) g.hardDrop();
+        if (this.tries > 12) return this._commit();
         return "wait";
       }
       if (p.x < this.plan.x) {
-        if (!g._shift(1)) g.hardDrop();
+        if (!g._shift(1)) return this._commit();
         return "wait";
       }
       if (p.x > this.plan.x) {
-        if (!g._shift(-1)) g.hardDrop();
+        if (!g._shift(-1)) return this._commit();
         return "wait";
       }
+      if (this.plan.lines > 0) return this._commit();
       this.phase = "drop";
       this.timer = 0;
       return "wait";
@@ -1511,17 +1533,41 @@
 
     update(dt) {
       const g = this.game;
-      if (g.state !== "playing" || !g.current) {
+      if (g.state !== "playing") {
         this.plan = null;
+        this.phase = "think";
+        return;
+      }
+      if (!g.current) {
+        this.plan = null;
+        this.pieceId = -1;
+        this.phase = "think";
         return;
       }
       this.timer += dt;
+      if (this._cool > 0) this._cool = Math.max(0, this._cool - dt);
+      this._idle = (this._idle || 0) + dt;
+      const stall = this.skill.snap ? 350 : 700;
+      if (this._idle > stall) {
+        const from = g.events.length;
+        g.hardDrop();
+        this._noteClear(g, from);
+        this.pieceId = -1;
+        this.plan = null;
+        this.phase = "think";
+        this.timer = 0;
+        this._idle = 0;
+      }
       let steps = 0;
-      while (g.state === "playing" && g.current && steps++ < 8) {
+      while (g.state === "playing" && g.current && steps++ < 12) {
         const result = this._playOne();
-        if (result === "combo") continue;
+        if (result === "again") {
+          this._idle = 0;
+          continue;
+        }
         break;
       }
+      if (this.phase === "move" && this.plan) this._idle = 0;
     }
   }
 

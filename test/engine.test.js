@@ -232,6 +232,41 @@ test("hard bot plays faster than easy", () => {
   assert.strictEqual(hard.ai.skillName, "hard");
 });
 
+test("bots keep placing after they score a line", () => {
+  ["easy", "medium", "hard"].forEach(function (skill) {
+    const m = new E.BattleMatch(skill);
+    m.start();
+    m.bot.board = E.emptyBoard();
+    for (let y = 36; y < 40; y++) {
+      for (let x = 0; x < 10; x++) {
+        if (x !== 9) m.bot.board[y][x] = { type: "Z" };
+      }
+    }
+    m.bot.current = { type: "I", x: 3, y: 18, rot: 0 };
+    m.ai.skill.noise = 0;
+    m.ai.skill.mistake = 0;
+    m.ai.reset();
+    m.ai.timer = 999;
+    m.ai.pieceId = -1;
+    let piecesBeforeClear = 0;
+    let sawClear = false;
+    for (let i = 0; i < 40; i++) {
+      const lines0 = m.bot.lines;
+      const pieces0 = m.bot.stats.pieces;
+      m.update(40);
+      if (!sawClear && m.bot.lines > lines0) {
+        sawClear = true;
+        piecesBeforeClear = pieces0;
+      }
+    }
+    assert.ok(sawClear, skill + " never cleared");
+    assert.ok(
+      m.bot.stats.pieces >= piecesBeforeClear + 2,
+      skill + " stalled after a line: " + m.bot.stats.pieces + " after starting from " + piecesBeforeClear
+    );
+  });
+});
+
 test("line clears resolve immediately with no freeze", () => {
   const g = new E.Game();
   g.start("battle");
